@@ -1,32 +1,17 @@
 # CountDown
 
-An expressive SwiftUI date counter for iPhone. Save the days you are waiting for and the milestones you want to remember.
+SwiftUI day counter for iPhone with WidgetKit Home Screen and Lock Screen widgets.
 
-## MVP
+## Features
 
-- Add, edit, and delete events.
-- Calendar-day counting: upcoming, today, and elapsed days.
-- Four gradient themes and a selection of SF Symbols.
-- Local JSON persistence; shared App Group storage for widgets.
-- Russian UI, VoiceOver labels and Reduce Motion support.
-- Home Screen and Lock Screen widgets (see widget target).
+Create, edit and delete calendar-date events, with four gradients and SF Symbols. The app counts calendar days until, on and since an event; JSON data persists through App Groups. The widget selects the nearest upcoming event, then the most recent past event. Includes Russian UI and unit tests for DST, leap years, and Russian day word forms.
 
 ## Build
 
-Open `CountDown.xcodeproj` in Xcode 16.3 or newer; select the CountDown scheme and an iPhone simulator. The deployment target is iOS 18.4.
+Open `CountDown.xcodeproj` in Xcode 16.3+. Select the CountDown scheme and iPhone simulator (iOS 18.4+). To sign for a physical device, select your Apple Development Team for **both** app and extension and register/enable `group.com.slavny1.countdown` in both targets' App Groups. The identifier is a proposed value and must exist in your Developer account.
 
-For device signing and widget data sharing, register the App Group
-`group.com.slavny1.countdown` in your Apple Developer account and enable it for both the app and widget extension. Set your Apple development team in Signing & Capabilities.
-
-Run unit tests from Xcode with Cmd+U. No simulator or signing environment is available through the GitHub connector; builds/tests must be verified on a Mac.
-
-## Calendar semantics
-
-Events store **year/month/day** rather than a timestamp. They keep the same displayed calendar date when you change time zones. Days are counted between the starts of local calendar days (not as 24-hour durations), so daylight saving changes do not shift the count.
+Run tests via Cmd+U. Compilation and iPhone signing have not been verified in Xcode. Widget refresh is scheduled after local midnight and when events change.
 
 ## Next
 
-- Widget event selection (WidgetKit App Intents).
-- Local notifications and repeat/anniversary options.
-- Customization, delightful animation and haptics.
-- English localization, onboarding, App Store assets.
+Choose events for individual widgets via App Intents, reminders, recurring anniversaries, localization, more polished motion, onboarding.

@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+A10000000000000000000001 /* Widget.appex embed */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* Widget.appex */; };
+/* End PBXBuildFile section */
+/* Begin PBXCopyFilesBuildPhase section */
+A10000000000000000000003 /* Embed App Extensions */ = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A10000000000000000000001,); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0;};
+/* End PBXCopyFilesBuildPhase section */
 /* Begin PBXContainerItemProxy section */
 		508520443041A35000C0BD2B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +27,14 @@
 			remoteGlobalIDString = 508520343041A34E00C0BD2B;
 			remoteInfo = CountDown;
 		};
+A1000000000000000000000B /* Widget proxy */ = {isa = PBXContainerItemProxy; containerPortal = 5085202D3041A34E00C0BD2B; proxyType = 1; remoteGlobalIDString = A10000000000000000000005; remoteInfo = CountDownWidgets; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		508520353041A34E00C0BD2B /* CountDown.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CountDown.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		508520433041A35000C0BD2B /* CountDownTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CountDownTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5085204D3041A35000C0BD2B /* CountDownUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CountDownUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+A10000000000000000000002 /* Widget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CountDownWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -45,6 +53,7 @@
 			path = CountDownUITests;
 			sourceTree = "<group>";
 		};
+A10000000000000000000004 /* CountDownWidgets */ = {isa = PBXFileSystemSynchronizedRootGroup; path = CountDownWidgets; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +78,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+A10000000000000000000007 /* Widget frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +88,7 @@
 				508520373041A34E00C0BD2B /* CountDown */,
 				508520463041A35000C0BD2B /* CountDownTests */,
 				508520503041A35000C0BD2B /* CountDownUITests */,
+A10000000000000000000004 /* CountDownWidgets */,
 				508520363041A34E00C0BD2B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +99,7 @@
 				508520353041A34E00C0BD2B /* CountDown.app */,
 				508520433041A35000C0BD2B /* CountDownTests.xctest */,
 				5085204D3041A35000C0BD2B /* CountDownUITests.xctest */,
+A10000000000000000000002 /* Widget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,10 +114,12 @@
 				508520313041A34E00C0BD2B /* Sources */,
 				508520323041A34E00C0BD2B /* Frameworks */,
 				508520333041A34E00C0BD2B /* Resources */,
+A10000000000000000000003 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+A1000000000000000000000A /* Widget dependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				508520373041A34E00C0BD2B /* CountDown */,
@@ -163,6 +177,7 @@
 			productReference = 5085204D3041A35000C0BD2B /* CountDownUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+A10000000000000000000005 /* CountDownWidgets */ = {isa = PBXNativeTarget; buildConfigurationList = A10000000000000000000009; buildPhases = (A10000000000000000000006,A10000000000000000000007,A10000000000000000000008,); buildRules = (); dependencies = (); fileSystemSynchronizedGroups = (A10000000000000000000004,); name = CountDownWidgets; packageProductDependencies = (); productName = CountDownWidgets; productReference = A10000000000000000000002; productType = "com.apple.product-type.app-extension"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -203,6 +218,7 @@
 				508520343041A34E00C0BD2B /* CountDown */,
 				508520423041A35000C0BD2B /* CountDownTests */,
 				5085204C3041A35000C0BD2B /* CountDownUITests */,
+A10000000000000000000005 /* CountDownWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -229,6 +245,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+A10000000000000000000008 /* Widget resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -253,6 +270,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+A10000000000000000000006 /* Widget sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -266,6 +284,7 @@
 			target = 508520343041A34E00C0BD2B /* CountDown */;
 			targetProxy = 5085204E3041A35000C0BD2B /* PBXContainerItemProxy */;
 		};
+A1000000000000000000000A /* Widget dependency */ = {isa = PBXTargetDependency; target = A10000000000000000000005; targetProxy = A1000000000000000000000B; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -543,6 +562,7 @@
 			};
 			name = Release;
 		};
+A
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -582,6 +602,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+A10000000000000000000009 /* Widget configs */ = {isa = XCConfigurationList; buildConfigurations = (A1000000000000000000000C,A1000000000000000000000D,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = 5085202D3041A34E00C0BD2B /* Project object */;
