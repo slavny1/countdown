@@ -471,6 +471,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				INFOPLIST_KEY_CFBundleDisplayName = "Дни";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = CountDown/CountDown.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -509,6 +510,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				INFOPLIST_KEY_CFBundleDisplayName = "Дни";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = CountDown/CountDown.entitlements;
 				CODE_SIGN_STYLE = Automatic;
