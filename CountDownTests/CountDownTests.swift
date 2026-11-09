@@ -78,6 +78,40 @@ struct CountDownTests {
         #expect(decoded.style == event.style)
     }
 
+    @Test func countUpStartsAtZeroAndAdvances() {
+        let origin = utcCalendar.date(from: DateComponents(year: 2026, month: 11, day: 9,
+                                                            hour: 12, minute: 10, second: 15))!
+        let event = CountEvent(title: "Начало",
+                               date: CalendarDay(date: origin, includesTime: true,
+                                                 includesSeconds: true, calendar: utcCalendar),
+                               countsUp: true)
+        #expect(DayCount.reading(for: event, now: origin, calendar: utcCalendar).number == 0)
+        #expect(DayCount.reading(for: event, now: origin, calendar: utcCalendar).unit == .minutes)
+        let later = origin.addingTimeInterval(3_600)
+        #expect(DayCount.reading(for: event, now: later, calendar: utcCalendar).unit == .hours)
+        #expect(DayCount.reading(for: event, now: later, calendar: utcCalendar).number == 1)
+    }
+
+    @Test func secondsAndMaskColorRoundTrip() throws {
+        let date = CalendarDay(year: 2026, month: 11, day: 9, hour: 20, minute: 12, second: 29)
+        let event = CountEvent(title: "Секундомер", date: date,
+                               maskOpacity: 0.8, maskColorHex: "E8C4F0", countsUp: true)
+        let encoded = try JSONEncoder().encode(event)
+        let restored = try JSONDecoder().decode(CountEvent.self, from: encoded)
+        #expect(restored.countsUp)
+        #expect(restored.maskColorHex == "E8C4F0")
+        #expect(restored.date.second == 29)
+    }
+
+    @Test func olderPhotosKeepMaskAndCountdown() throws {
+        let legacy = """
+        {"id":"00000000-0000-0000-0000-000000000043","title":"Старое","date":{"year":2026,"month":4,"day":30},"palette":"coral","symbol":"star","mask":"plum","maskOpacity":0.55}
+        """
+        let event = try JSONDecoder().decode(CountEvent.self, from: Data(legacy.utf8))
+        #expect(event.maskColorHex == "541F4A")
+        #expect(!event.countsUp)
+    }
+
     @Test func monthsAreCalendarAware() {
         let now = utcCalendar.date(from: DateComponents(year: 2026, month: 5, day: 1))!
         let event = CountEvent(title: "Дата", date: CalendarDay(year: 2026, month: 4, day: 30))
