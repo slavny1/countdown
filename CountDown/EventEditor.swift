@@ -140,7 +140,7 @@ struct EventEditor: View {
                                     .font(.title3)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 44)
-                                    .foregroundStyle(symbol == option ? .white : .primary)
+                                    .foregroundStyle(symbol == option ? Color.white : Color.primary)
                                     .background(symbol == option ? Color.accentColor : Color(uiColor: .tertiarySystemFill),
                                                 in: RoundedRectangle(cornerRadius: 12))
                             }
