@@ -43,6 +43,50 @@ private struct WidgetDay: Decodable {
     }
 }
 
+private struct WidgetCardStyle: Decodable {
+    let typeface: String
+    let thickness: String
+    let scale: Double
+    let textColorHex: String
+    let alignment: String
+    let unitPlacement: String
+
+    var color: Color {
+        let value = UInt64(textColorHex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0xFFFFFF
+        return Color(.sRGB, red: Double((value >> 16) & 0xFF) / 255,
+                     green: Double((value >> 8) & 0xFF) / 255,
+                     blue: Double(value & 0xFF) / 255, opacity: 1)
+    }
+
+    var design: Font.Design {
+        switch typeface {
+        case "modern": .default
+        case "soft": .rounded
+        case "mono": .monospaced
+        default: .serif
+        }
+    }
+
+    var weight: Font.Weight {
+        switch thickness {
+        case "light": .light
+        case "regular": .regular
+        case "medium": .medium
+        case "semibold": .semibold
+        case "heavy": .heavy
+        default: .bold
+        }
+    }
+
+    var placementBelow: Bool { unitPlacement == "below" }
+    var centered: Bool { alignment == "center" }
+
+    static let standard = WidgetCardStyle(
+        typeface: "editorial", thickness: "bold", scale: 1,
+        textColorHex: "FFFFFF", alignment: "leading", unitPlacement: "beside"
+    )
+}
+
 private struct WidgetEvent: Decodable {
     let id: UUID
     let title: String
@@ -53,6 +97,7 @@ private struct WidgetEvent: Decodable {
     let photoFilename: String?
     let mask: String?
     let maskOpacity: Double?
+    let style: WidgetCardStyle?
 
     func calendarDays(from now: Date, calendar: Calendar = .current) -> Int {
         calendar.dateComponents([.day],
@@ -255,8 +300,26 @@ private struct CountWidgetFace: View {
     @Environment(\.widgetRenderingMode) private var renderingMode
     let entry: CountEntry
 
+    private var style: WidgetCardStyle { entry.event?.style ?? .standard }
+
     private var numberSize: CGFloat {
-        family == .systemMedium ? 112 : 91
+        (family == .systemMedium ? 112 : 91) * CGFloat(min(max(style.scale, 0.75), 1.45))
+    }
+
+    private var numberText: some View {
+        Text(entry.reading.number, format: .number)
+            .font(.system(size: numberSize, weight: style.weight, design: style.design))
+            .tracking(-3)
+            .lineLimit(1)
+            .minimumScaleFactor(0.3)
+            .monospacedDigit()
+    }
+
+    private var unitText: some View {
+        Text(entry.reading.label)
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
     }
 
     var body: some View {
@@ -291,7 +354,7 @@ private struct CountWidgetFace: View {
                         .font(.system(size: 9, weight: .heavy))
                 }
             default:
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: style.centered ? .center : .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Image(systemName: entry.event?.symbol ?? "calendar")
                         Text(entry.reading.direction.uppercased())
@@ -300,23 +363,26 @@ private struct CountWidgetFace: View {
                     }
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     Spacer(minLength: 0)
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(entry.reading.number, format: .number)
-                            .font(.system(size: numberSize, weight: .bold, design: .serif))
-                            .tracking(-4)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.35)
-                        Text(entry.reading.label)
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                    Group {
+                        if style.placementBelow {
+                            VStack(alignment: style.centered ? .center : .leading, spacing: -2) {
+                                numberText
+                                unitText
+                            }
+                        } else {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                numberText
+                                unitText
+                            }
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: style.centered ? .center : .leading)
                     Text(entry.event?.title ?? "Создай событие")
                         .font(.system(size: family == .systemMedium ? 20 : 16,
-                                      weight: .bold, design: .serif))
+                                      weight: .bold, design: style.design))
                         .lineLimit(1)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(style.color)
                 .padding(2)
             }
         }
