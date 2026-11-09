@@ -98,6 +98,9 @@ private struct WidgetEvent: Decodable {
     let mask: String?
     let maskOpacity: Double?
     let maskColorHex: String?
+    let photoZoom: Double?
+    let photoFocusX: Double?
+    let photoFocusY: Double?
     let countsUp: Bool?
     let style: WidgetCardStyle?
 
@@ -307,9 +310,18 @@ private struct WidgetBackground: View {
         GeometryReader { proxy in
             if let event,
                let image = SharedEvents.photo(named: event.photoFilename) {
+                let scale = max(proxy.size.width / max(image.size.width, 1),
+                                proxy.size.height / max(image.size.height, 1))
+                    * CGFloat(min(max(event.photoZoom ?? 1, 1), 2.5))
+                let width = image.size.width * scale
+                let height = image.size.height * scale
+                let x = (width - proxy.size.width) * CGFloat(0.5 - (event.photoFocusX ?? 0.5))
+                let y = (height - proxy.size.height) * CGFloat(0.5 - (event.photoFocusY ?? 0.5))
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
+                    .interpolation(.high)
+                    .frame(width: width, height: height)
+                    .position(x: proxy.size.width / 2 + x, y: proxy.size.height / 2 + y)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                     .overlay(event.maskColor.opacity(min(max(event.maskOpacity ?? 0.55, 0), 0.9)))
