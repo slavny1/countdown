@@ -92,9 +92,19 @@ struct EventBackground: View {
     var body: some View {
         GeometryReader { proxy in
             if let image = previewImage ?? EventPhotoStore.image(named: event.photoFilename) {
+                let scale = max(proxy.size.width / max(image.size.width, 1),
+                                proxy.size.height / max(image.size.height, 1))
+                    * CGFloat(min(max(event.photoZoom, 1), 2.5))
+                let fullWidth = image.size.width * scale
+                let fullHeight = image.size.height * scale
+                let offsetX = (fullWidth - proxy.size.width) * CGFloat(0.5 - event.photoFocusX)
+                let offsetY = (fullHeight - proxy.size.height) * CGFloat(0.5 - event.photoFocusY)
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
+                    .interpolation(.high)
+                    .frame(width: fullWidth, height: fullHeight)
+                    .position(x: proxy.size.width / 2 + offsetX,
+                              y: proxy.size.height / 2 + offsetY)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                     .overlay(Color(rgbHex: event.maskColorHex).opacity(event.maskOpacity))
