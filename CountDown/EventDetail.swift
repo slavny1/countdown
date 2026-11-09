@@ -9,7 +9,7 @@ struct EventDetail: View {
             let reading = DayCount.reading(for: event, now: context.date)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: event.style.horizontalAlignment, spacing: 12) {
                         HStack {
                             Image(systemName: event.symbol)
                             Text(reading.direction.uppercased())
@@ -17,13 +17,14 @@ struct EventDetail: View {
                                 .tracking(1.5)
                             Spacer()
                         }
-                        EventNumber(reading: reading, large: true)
+                        EventNumber(reading: reading, large: true, style: event.style)
+                            .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
                         Text(event.title)
                             .font(.system(size: 32, weight: .bold, design: .serif))
                         Text(event.date.date().formatted(.dateTime.day().month(.wide).year()))
                             .font(.subheadline.weight(.medium))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(event.style.textColor)
                     .padding(28)
                     .frame(maxWidth: .infinity, minHeight: 310, alignment: .leading)
                     .background { EventBackground(event: event) }
