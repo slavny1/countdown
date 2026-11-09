@@ -17,6 +17,9 @@ struct EventEditor: View {
     @State private var symbol: String
     @State private var mask: PhotoMask
     @State private var maskColorHex: String
+    @State private var photoZoom: Double
+    @State private var photoFocusX: Double
+    @State private var photoFocusY: Double
     @State private var countsUp: Bool
     @State private var maskOpacity: Double
     @State private var style: CardStyle
@@ -41,6 +44,9 @@ struct EventEditor: View {
         _symbol = State(initialValue: event?.symbol ?? "sparkles")
         _mask = State(initialValue: event?.mask ?? .black)
         _maskColorHex = State(initialValue: event?.maskColorHex ?? "000000")
+        _photoZoom = State(initialValue: event?.photoZoom ?? 1)
+        _photoFocusX = State(initialValue: event?.photoFocusX ?? 0.5)
+        _photoFocusY = State(initialValue: event?.photoFocusY ?? 0.5)
         _countsUp = State(initialValue: event?.countsUp ?? false)
         _maskOpacity = State(initialValue: event?.maskOpacity ?? 0.55)
         _style = State(initialValue: event?.style ?? CardStyle())
@@ -63,7 +69,9 @@ struct EventEditor: View {
                    showsMilestones: showsMilestones,
                    photoFilename: removePhoto ? nil : existingEvent?.photoFilename,
                    mask: mask, maskOpacity: maskOpacity,
-                   maskColorHex: maskColorHex, style: style, countsUp: countsUp)
+                   maskColorHex: maskColorHex, photoZoom: photoZoom,
+                   photoFocusX: photoFocusX, photoFocusY: photoFocusY,
+                   style: style, countsUp: countsUp)
     }
 
     var body: some View {
@@ -167,6 +175,8 @@ struct EventEditor: View {
             .sheet(isPresented: $showCustomizer) {
                 CardStyleCustomizer(style: $style, palette: $palette,
                                     maskColorHex: $maskColorHex, maskOpacity: $maskOpacity,
+                                    photoZoom: $photoZoom, photoFocusX: $photoFocusX,
+                                    photoFocusY: $photoFocusY,
                                     selectedPhoto: $selectedPhoto, pendingImage: $pendingImage,
                                     removePhoto: $removePhoto, previewEvent: previewEvent)
             }
@@ -195,7 +205,9 @@ struct EventEditor: View {
             note: note, unit: unit,
             showsMilestones: showsMilestones, photoFilename: filename,
             mask: mask, maskOpacity: maskOpacity,
-            maskColorHex: maskColorHex, style: style, countsUp: countsUp
+            maskColorHex: maskColorHex, photoZoom: photoZoom,
+            photoFocusX: photoFocusX, photoFocusY: photoFocusY,
+            style: style, countsUp: countsUp
         )
         if existingEvent == nil { store.add(event) }
         else { store.update(event) }
