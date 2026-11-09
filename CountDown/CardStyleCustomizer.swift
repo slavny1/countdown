@@ -16,6 +16,9 @@ struct CardStyleCustomizer: View {
     @Binding var palette: EventPalette
     @Binding var maskColorHex: String
     @Binding var maskOpacity: Double
+    @Binding var photoZoom: Double
+    @Binding var photoFocusX: Double
+    @Binding var photoFocusY: Double
     @Binding var selectedPhoto: PhotosPickerItem?
     @Binding var pendingImage: UIImage?
     @Binding var removePhoto: Bool
@@ -48,6 +51,9 @@ struct CardStyleCustomizer: View {
         event.palette = palette
         event.maskColorHex = maskColorHex
         event.maskOpacity = maskOpacity
+        event.photoZoom = photoZoom
+        event.photoFocusX = photoFocusX
+        event.photoFocusY = photoFocusY
         return event
     }
 
@@ -207,6 +213,32 @@ struct CardStyleCustomizer: View {
                                     .frame(width: 43, alignment: .trailing)
                             }
                             .disabled(currentPhoto == nil)
+                            if currentPhoto != nil {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("Кадрирование")
+                                        .font(.subheadline.weight(.semibold))
+                                    HStack {
+                                        Text("Масштаб")
+                                        Slider(value: $photoZoom, in: 1...2.5, step: 0.05)
+                                        Text(String(format: "%.1f×", photoZoom))
+                                            .font(.caption.monospacedDigit())
+                                            .frame(width: 40)
+                                    }
+                                    HStack {
+                                        Text("По горизонтали")
+                                        Slider(value: $photoFocusX, in: 0...1)
+                                    }
+                                    HStack {
+                                        Text("По вертикали")
+                                        Slider(value: $photoFocusY, in: 0...1)
+                                    }
+                                    Button("Центрировать фотографию") {
+                                        photoFocusX = 0.5
+                                        photoFocusY = 0.5
+                                        photoZoom = 1
+                                    }
+                                }
+                            }
                         }
 
                     case .layout:
