@@ -95,11 +95,16 @@ struct CountDownTests {
     @Test func secondsAndMaskColorRoundTrip() throws {
         let date = CalendarDay(year: 2026, month: 11, day: 9, hour: 20, minute: 12, second: 29)
         let event = CountEvent(title: "Секундомер", date: date,
-                               maskOpacity: 0.8, maskColorHex: "E8C4F0", countsUp: true)
+                               maskOpacity: 0.8, maskColorHex: "E8C4F0",
+                               photoZoom: 1.65, photoFocusX: 0.2, photoFocusY: 0.85,
+                               countsUp: true)
         let encoded = try JSONEncoder().encode(event)
         let restored = try JSONDecoder().decode(CountEvent.self, from: encoded)
         #expect(restored.countsUp)
         #expect(restored.maskColorHex == "E8C4F0")
+        #expect(restored.photoZoom == 1.65)
+        #expect(restored.photoFocusX == 0.2)
+        #expect(restored.photoFocusY == 0.85)
         #expect(restored.date.second == 29)
     }
 
@@ -110,6 +115,9 @@ struct CountDownTests {
         let event = try JSONDecoder().decode(CountEvent.self, from: Data(legacy.utf8))
         #expect(event.maskColorHex == "541F4A")
         #expect(!event.countsUp)
+        #expect(event.photoZoom == 1)
+        #expect(event.photoFocusX == 0.5)
+        #expect(event.photoFocusY == 0.5)
     }
 
     @Test func monthsAreCalendarAware() {
