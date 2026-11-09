@@ -3,48 +3,63 @@ import SwiftUI
 struct EventDetail: View {
     let event: CountEvent
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: EventStore
+    @State private var showingSettings = false
+
+    private var currentEvent: CountEvent {
+        store.events.first(where: { $0.id == event.id }) ?? event
+    }
+
+    private func restart() {
+        var updated = currentEvent
+        updated.date = CalendarDay(date: .now, includesTime: true, includesSeconds: true)
+        updated.countsUp = true
+        store.update(updated)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            let reading = DayCount.reading(for: event, now: context.date)
+            let liveEvent = currentEvent
+            let reading = DayCount.reading(for: liveEvent, now: context.date)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: event.style.horizontalAlignment, spacing: 12) {
+                    VStack(alignment: liveEvent.style.horizontalAlignment, spacing: 12) {
                         HStack {
-                            Image(systemName: event.symbol)
+                            Image(systemName: liveEvent.symbol)
                             Text(reading.direction.uppercased())
                                 .font(.caption2.weight(.heavy))
                                 .tracking(1.5)
                             Spacer()
                         }
-                        EventNumber(reading: reading, large: true, style: event.style)
-                            .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
-                        Text(event.title)
+                        EventNumber(reading: reading, large: true, style: liveEvent.style)
+                            .frame(maxWidth: .infinity, alignment: liveEvent.style.swiftUIAlignment)
+                        Text(liveEvent.title)
                             .font(.system(size: 32, weight: .bold, design: .serif))
-                        Text(event.date.date().formatted(.dateTime.day().month(.wide).year()))
+                        Text(liveEvent.date.date().formatted(.dateTime.day().month(.wide).year()))
                             .font(.subheadline.weight(.medium))
                     }
-                    .foregroundStyle(event.style.textColor)
+                    .foregroundStyle(liveEvent.style.textColor)
                     .padding(28)
                     .frame(maxWidth: .infinity, minHeight: 310, alignment: .leading)
-                    .background { EventBackground(event: event) }
+                    .background { EventBackground(event: liveEvent) }
                     .clipShape(RoundedRectangle(cornerRadius: 30))
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Заметка")
                             .font(.title2.bold())
-                        if event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if liveEvent.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text("Пока нет заметки. Её можно добавить через свайп влево → Изменить.")
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text(event.note)
+                            Text(liveEvent.note)
                                 .font(.body)
                                 .textSelection(.enabled)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if let milestone = EventMilestones.next(for: event, now: context.date) {
+                    if let milestone = EventMilestones.next(for: liveEvent, now: context.date) {
                         VStack(alignment: .leading, spacing: 8) {
                             Label("Круглая дата", systemImage: "sparkles")
                                 .font(.headline)
@@ -64,9 +79,31 @@ struct EventDetail: View {
         .navigationTitle("Событие")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Настроить", systemImage: "slider.horizontal.3") {
+                    showingSettings = true
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Готово") { dismiss() }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if currentEvent.countsUp {
+                Button {
+                    restart()
+                } label: {
+                    Label("Начать заново с текущего момента", systemImage: "arrow.counterclockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.regularMaterial)
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            EventEditor(event: currentEvent).environmentObject(store)
         }
     }
 }
