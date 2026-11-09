@@ -27,3 +27,15 @@ Compilation / widget installation on a physical iPhone still require local Xcode
 ## Potential next features
 
 Notifications for milestones; repeat annual events; pinned/favorite event; iCloud sync; layout presets; export/shareable day cards; smart widget stacks.
+
+## Visual card customizer (draft)
+
+In an event's edit sheet, tap **Настроить стиль** to open a live card preview inspired by the iOS Lock Screen clock editor. Three sections provide:
+
+- **Шрифт**: editorial serif, standard sans, rounded, or monospaced numerals; six weights and a 75–145% size slider.
+- **Цвет**: eight curated swatches plus an iOS Color Picker.
+- **Макет**: left/center alignment and unit labels beside or below the number, with a reset action.
+
+Appearance persists per event and is read by Home Screen widgets. Lock Screen accessory widgets have system-controlled tinting and limited layout, so iOS may override custom color there. Existing events default to the original serif/white style.
+
+**Build note:** The customizer has been committed to a separate feature branch, but Xcode compilation and device validation have not been run by the GitHub integration. Run the app and Widget extension builds in Xcode before merging. The existing signing, Bundle ID, App Group, and Copy only when installing settings are unchanged.
