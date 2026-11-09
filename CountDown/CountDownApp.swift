@@ -1,17 +1,13 @@
-//
-//  CountDownApp.swift
-//  CountDown
-//
-//  Created by Вячеслав Горев on 28/8/2026.
-//
-
 import SwiftUI
 
 @main
 struct CountDownApp: App {
+    @StateObject private var store = EventStore()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(store)
         }
     }
 }
