@@ -64,7 +64,7 @@ struct EventEditor: View {
     private var previewEvent: CountEvent {
         CountEvent(id: existingEvent?.id ?? UUID(),
                    title: trimmedTitle.isEmpty ? "Моё событие" : trimmedTitle,
-                   date: CalendarDay(date: selectedDate, includesTime: includesTime, includesSeconds: countsUp),
+                   date: CalendarDay(date: selectedDate, includesTime: includesTime, includesSeconds: includesTime),
                    palette: palette, symbol: symbol, note: note, unit: unit,
                    showsMilestones: showsMilestones,
                    photoFilename: removePhoto ? nil : existingEvent?.photoFilename,
@@ -180,7 +180,7 @@ struct EventEditor: View {
                                     selectedPhoto: $selectedPhoto, pendingImage: $pendingImage,
                                     removePhoto: $removePhoto, previewEvent: previewEvent)
             }
-            .alert("Не удалось открыть фото", isPresented: $photoError) {
+            .alert("Не удалось сохранить фото", isPresented: $photoError) {
                 Button("ОК", role: .cancel) { }
             }
         }
@@ -195,12 +195,16 @@ struct EventEditor: View {
             filename = nil
         }
         if let pendingImage {
-            filename = EventPhotoStore.save(pendingImage, for: id) ?? filename
+            guard let savedName = EventPhotoStore.save(pendingImage, for: id) else {
+                photoError = true
+                return
+            }
+            filename = savedName
         }
 
         let event = CountEvent(
             id: id, title: trimmedTitle,
-            date: CalendarDay(date: selectedDate, includesTime: includesTime, includesSeconds: countsUp),
+            date: CalendarDay(date: selectedDate, includesTime: includesTime, includesSeconds: includesTime),
             palette: palette, symbol: symbol,
             note: note, unit: unit,
             showsMilestones: showsMilestones, photoFilename: filename,
