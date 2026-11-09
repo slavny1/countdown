@@ -25,6 +25,66 @@ extension PhotoMask {
     }
 }
 
+extension CardThickness {
+    var fontWeight: Font.Weight {
+        switch self {
+        case .light: .light
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
+        case .heavy: .heavy
+        }
+    }
+}
+
+extension CardTypeface {
+    var fontDesign: Font.Design {
+        switch self {
+        case .editorial: .serif
+        case .modern: .default
+        case .soft: .rounded
+        case .mono: .monospaced
+        }
+    }
+}
+
+extension CardStyle {
+    var textColor: Color { Color(rgbHex: textColorHex) }
+
+    var swiftUIAlignment: Alignment {
+        alignment == .center ? .center : .leading
+    }
+
+    var horizontalAlignment: HorizontalAlignment {
+        alignment == .center ? .center : .leading
+    }
+}
+
+extension Color {
+    init(rgbHex: String) {
+        let raw = rgbHex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        let value = UInt64(raw, radix: 16) ?? 0xFFFFFF
+        self.init(.sRGB,
+                  red: Double((value >> 16) & 0xff) / 255,
+                  green: Double((value >> 8) & 0xff) / 255,
+                  blue: Double(value & 0xff) / 255,
+                  opacity: 1)
+    }
+
+    var rgbHex: String {
+        let color = UIColor(self)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return "FFFFFF" }
+        return String(format: "%02X%02X%02X",
+                      Int((red * 255).rounded()), Int((green * 255).rounded()),
+                      Int((blue * 255).rounded()))
+    }
+}
+
 struct EventBackground: View {
     let event: CountEvent
 
@@ -47,25 +107,45 @@ struct EventBackground: View {
 struct EventNumber: View {
     let reading: CountReading
     let large: Bool
+    var style: CardStyle = CardStyle()
+
+    private var numberSize: CGFloat {
+        (large ? (reading.isFuture ? 72 : 86) : 62) * CGFloat(min(max(style.scale, 0.75), 1.45))
+    }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 9) {
-            Text(reading.number, format: .number)
-                .font(.system(size: large ? (reading.isFuture ? 72 : 86) : 62,
-                              weight: .bold, design: .serif))
-                .tracking(-3)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .contentTransition(.numericText())
-                .accessibilityHidden(true)
-            Text(reading.unitLabel)
-                .font(.system(size: large ? 17 : 14, weight: .semibold, design: .rounded))
-                .lineLimit(1)
-                .accessibilityHidden(true)
+        Group {
+            if style.unitPlacement == .beside {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    numberText
+                    unitText
+                }
+            } else {
+                VStack(alignment: style.horizontalAlignment, spacing: -4) {
+                    numberText
+                    unitText
+                }
+            }
         }
+        .foregroundStyle(style.textColor)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(reading.number) \(reading.unitLabel)")
+    }
+
+    private var numberText: some View {
+        Text(reading.number, format: .number)
+            .font(.system(size: numberSize, weight: style.thickness.fontWeight, design: style.typeface.fontDesign))
+            .tracking(-2)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.35)
+            .contentTransition(.numericText())
+    }
+
+    private var unitText: some View {
+        Text(reading.unitLabel)
+            .font(.system(size: large ? 17 : 14, weight: .semibold, design: .rounded))
+            .lineLimit(1)
     }
 }
 
@@ -76,7 +156,7 @@ struct EventCard: View {
     private var reading: CountReading { DayCount.reading(for: event, now: now) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: event.style.horizontalAlignment, spacing: 7) {
             HStack(alignment: .center) {
                 Image(systemName: event.symbol)
                     .font(.subheadline.weight(.bold))
@@ -91,7 +171,8 @@ struct EventCard: View {
                 }
             }
             Spacer(minLength: 2)
-            EventNumber(reading: reading, large: false)
+            EventNumber(reading: reading, large: false, style: event.style)
+                .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
             HStack(alignment: .firstTextBaseline) {
                 Text(event.title)
                     .font(.system(size: 20, weight: .bold, design: .serif))
@@ -102,7 +183,7 @@ struct EventCard: View {
                     .opacity(0.85)
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(event.style.textColor)
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 176)
