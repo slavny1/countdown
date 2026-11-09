@@ -8,29 +8,32 @@ struct CalendarDay: Codable, Hashable {
     var day: Int
     var hour: Int?
     var minute: Int?
+    var second: Int?
 
-    init(year: Int, month: Int, day: Int, hour: Int? = nil, minute: Int? = nil) {
+    init(year: Int, month: Int, day: Int, hour: Int? = nil, minute: Int? = nil, second: Int? = nil) {
         self.year = year
         self.month = month
         self.day = day
         self.hour = hour
         self.minute = minute
+        self.second = second
     }
 
-    init(date: Date, includesTime: Bool = false, calendar: Calendar = .current) {
-        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+    init(date: Date, includesTime: Bool = false, includesSeconds: Bool = false, calendar: Calendar = .current) {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
         self.init(year: components.year ?? 2000,
                   month: components.month ?? 1,
                   day: components.day ?? 1,
                   hour: includesTime ? (components.hour ?? 0) : nil,
-                  minute: includesTime ? (components.minute ?? 0) : nil)
+                  minute: includesTime ? (components.minute ?? 0) : nil,
+                  second: includesSeconds ? (components.second ?? 0) : nil)
     }
 
     var includesTime: Bool { hour != nil }
 
     func date(in calendar: Calendar = .current) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day,
-                                           hour: hour ?? 0, minute: minute ?? 0))
+                                           hour: hour ?? 0, minute: minute ?? 0, second: second ?? 0))
         ?? calendar.startOfDay(for: .now)
     }
 }
@@ -72,6 +75,20 @@ enum PhotoMask: String, Codable, CaseIterable, Identifiable {
         case .brown: "Тёплый"
         }
     }
+    var legacyHex: String {
+        switch self {
+        case .black: "000000"
+        case .navy: "142957"
+        case .plum: "541F4A"
+        case .brown: "47291A"
+        }
+    }
+}
+
+/// Same curated color choices for card text and photo overlays.
+enum CardColorPalette {
+    static let swatches = ["FFFFFF", "F0E3D1", "1B2029", "F6CF59",
+                           "C8E9FF", "E8C4F0", "B9EDC6", "FFB8A7"]
 }
 
 /// Appearance is saved per event and shared with the home screen widget.
@@ -138,14 +155,16 @@ struct CountEvent: Identifiable, Codable, Hashable {
     var photoFilename: String?
     var mask: PhotoMask
     var maskOpacity: Double
+    var maskColorHex: String
     var style: CardStyle
+    var countsUp: Bool
 
     init(id: UUID = UUID(), title: String, date: CalendarDay,
          palette: EventPalette = .coral, symbol: String = "sparkles",
          note: String = "", unit: CountUnit = .automatic,
          showsMilestones: Bool = true, photoFilename: String? = nil,
          mask: PhotoMask = .black, maskOpacity: Double = 0.55,
-         style: CardStyle = CardStyle()) {
+         maskColorHex: String? = nil, style: CardStyle = CardStyle(), countsUp: Bool = false) {
         self.id = id
         self.title = title
         self.date = date
@@ -157,12 +176,14 @@ struct CountEvent: Identifiable, Codable, Hashable {
         self.photoFilename = photoFilename
         self.mask = mask
         self.maskOpacity = min(max(maskOpacity, 0), 0.9)
+        self.maskColorHex = maskColorHex ?? mask.legacyHex
         self.style = style
+        self.countsUp = countsUp
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, date, palette, symbol, note, unit
-        case showsMilestones, photoFilename, mask, maskOpacity, style
+        case showsMilestones, photoFilename, mask, maskOpacity, maskColorHex, style, countsUp
     }
 
     // Older events only contain id, title, date, palette, and symbol.
@@ -179,7 +200,9 @@ struct CountEvent: Identifiable, Codable, Hashable {
         photoFilename = try c.decodeIfPresent(String.self, forKey: .photoFilename)
         mask = try c.decodeIfPresent(PhotoMask.self, forKey: .mask) ?? .black
         maskOpacity = min(max(try c.decodeIfPresent(Double.self, forKey: .maskOpacity) ?? 0.55, 0), 0.9)
+        maskColorHex = try c.decodeIfPresent(String.self, forKey: .maskColorHex) ?? mask.legacyHex
         style = try c.decodeIfPresent(CardStyle.self, forKey: .style) ?? CardStyle()
+        countsUp = try c.decodeIfPresent(Bool.self, forKey: .countsUp) ?? false
     }
 }
 
@@ -219,12 +242,16 @@ enum DayCount {
 
     static func reading(for event: CountEvent, now: Date = .now, calendar: Calendar = .current) -> CountReading {
         let delta = event.date.date(in: calendar).timeIntervalSince(now)
-        let future = delta >= 0
-        let seconds = abs(delta)
+        let future = !event.countsUp && delta >= 0
+        let seconds = event.countsUp ? max(0, -delta) : abs(delta)
         let chosen: CountUnit
         if event.unit == .automatic {
-            chosen = !future || seconds >= 86_400 ? .days
-                : (seconds >= 3_600 ? .hours : .minutes)
+            if event.countsUp {
+                chosen = seconds >= 86_400 ? .days : (seconds >= 3_600 ? .hours : .minutes)
+            } else {
+                chosen = !future || seconds >= 86_400 ? .days
+                    : (seconds >= 3_600 ? .hours : .minutes)
+            }
         } else {
             chosen = event.unit
         }
