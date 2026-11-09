@@ -58,6 +58,26 @@ struct CountDownTests {
         #expect(DayCount.dayWord(11) == "дней")
     }
 
+    @Test func legacyEventsKeepOriginalAppearance() throws {
+        let sample = """
+        {"id":"00000000-0000-0000-0000-000000000042","title":"Событие","date":{"year":2026,"month":4,"day":30},"palette":"coral","symbol":"star"}
+        """
+        let event = try JSONDecoder().decode(CountEvent.self, from: Data(sample.utf8))
+        #expect(event.style.typeface == .editorial)
+        #expect(event.style.scale == 1)
+        #expect(event.style.textColorHex == "FFFFFF")
+        #expect(event.style.unitPlacement == .beside)
+    }
+
+    @Test func cardStylePersistsInEventJSON() throws {
+        var event = CountEvent(title: "Дата", date: CalendarDay(year: 2027, month: 1, day: 1))
+        event.style = CardStyle(typeface: .soft, thickness: .light, scale: 1.3,
+                                textColorHex: "F6CF59", alignment: .center, unitPlacement: .below)
+        let encoded = try JSONEncoder().encode(event)
+        let decoded = try JSONDecoder().decode(CountEvent.self, from: encoded)
+        #expect(decoded.style == event.style)
+    }
+
     @Test func monthsAreCalendarAware() {
         let now = utcCalendar.date(from: DateComponents(year: 2026, month: 5, day: 1))!
         let event = CountEvent(title: "Дата", date: CalendarDay(year: 2026, month: 4, day: 30))

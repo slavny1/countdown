@@ -74,6 +74,58 @@ enum PhotoMask: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Appearance is saved per event and shared with the home screen widget.
+/// Defaults intentionally match the original visual style of existing events.
+enum CardTypeface: String, Codable, CaseIterable, Identifiable {
+    case editorial, modern, soft, mono
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .editorial: "Классика"
+        case .modern: "Чёткий"
+        case .soft: "Мягкий"
+        case .mono: "Цифровой"
+        }
+    }
+}
+
+enum CardThickness: String, Codable, CaseIterable, Identifiable {
+    case light, regular, medium, semibold, bold, heavy
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .light: "Тонкий"
+        case .regular: "Обычный"
+        case .medium: "Средний"
+        case .semibold: "Плотный"
+        case .bold: "Жирный"
+        case .heavy: "Очень жирный"
+        }
+    }
+}
+
+enum CardAlignment: String, Codable, CaseIterable, Identifiable {
+    case leading, center
+    var id: String { rawValue }
+    var title: String { self == .leading ? "Слева" : "По центру" }
+}
+
+enum CardUnitPlacement: String, Codable, CaseIterable, Identifiable {
+    case beside, below
+    var id: String { rawValue }
+    var title: String { self == .beside ? "Рядом" : "Снизу" }
+}
+
+struct CardStyle: Codable, Hashable {
+    var typeface: CardTypeface = .editorial
+    var thickness: CardThickness = .bold
+    var scale: Double = 1.0
+    /// Six-digit RGB, no opacity. Stored as a string for WidgetKit JSON sharing.
+    var textColorHex: String = "FFFFFF"
+    var alignment: CardAlignment = .leading
+    var unitPlacement: CardUnitPlacement = .beside
+}
+
 struct CountEvent: Identifiable, Codable, Hashable {
     var id: UUID
     var title: String
@@ -86,12 +138,14 @@ struct CountEvent: Identifiable, Codable, Hashable {
     var photoFilename: String?
     var mask: PhotoMask
     var maskOpacity: Double
+    var style: CardStyle
 
     init(id: UUID = UUID(), title: String, date: CalendarDay,
          palette: EventPalette = .coral, symbol: String = "sparkles",
          note: String = "", unit: CountUnit = .automatic,
          showsMilestones: Bool = true, photoFilename: String? = nil,
-         mask: PhotoMask = .black, maskOpacity: Double = 0.55) {
+         mask: PhotoMask = .black, maskOpacity: Double = 0.55,
+         style: CardStyle = CardStyle()) {
         self.id = id
         self.title = title
         self.date = date
@@ -103,11 +157,12 @@ struct CountEvent: Identifiable, Codable, Hashable {
         self.photoFilename = photoFilename
         self.mask = mask
         self.maskOpacity = min(max(maskOpacity, 0), 0.9)
+        self.style = style
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, date, palette, symbol, note, unit
-        case showsMilestones, photoFilename, mask, maskOpacity
+        case showsMilestones, photoFilename, mask, maskOpacity, style
     }
 
     // Older events only contain id, title, date, palette, and symbol.
@@ -124,6 +179,7 @@ struct CountEvent: Identifiable, Codable, Hashable {
         photoFilename = try c.decodeIfPresent(String.self, forKey: .photoFilename)
         mask = try c.decodeIfPresent(PhotoMask.self, forKey: .mask) ?? .black
         maskOpacity = min(max(try c.decodeIfPresent(Double.self, forKey: .maskOpacity) ?? 0.55, 0), 0.9)
+        style = try c.decodeIfPresent(CardStyle.self, forKey: .style) ?? CardStyle()
     }
 }
 
