@@ -87,16 +87,27 @@ extension Color {
 
 struct EventBackground: View {
     let event: CountEvent
+    var previewImage: UIImage? = nil
 
     var body: some View {
         GeometryReader { proxy in
-            if let image = EventPhotoStore.image(named: event.photoFilename) {
+            if let image = previewImage ?? EventPhotoStore.image(named: event.photoFilename) {
+                let scale = max(proxy.size.width / max(image.size.width, 1),
+                                proxy.size.height / max(image.size.height, 1))
+                    * CGFloat(min(max(event.photoZoom, 1), 2.5))
+                let fullWidth = image.size.width * scale
+                let fullHeight = image.size.height * scale
+                let offsetX = (fullWidth - proxy.size.width) * CGFloat(0.5 - event.photoFocusX)
+                let offsetY = (fullHeight - proxy.size.height) * CGFloat(0.5 - event.photoFocusY)
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
+                    .interpolation(.high)
+                    .frame(width: fullWidth, height: fullHeight)
+                    .position(x: proxy.size.width / 2 + offsetX,
+                              y: proxy.size.height / 2 + offsetY)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
-                    .overlay(event.mask.color.opacity(event.maskOpacity))
+                    .overlay(Color(rgbHex: event.maskColorHex).opacity(event.maskOpacity))
             } else {
                 event.palette.gradient
             }
@@ -152,6 +163,7 @@ struct EventNumber: View {
 struct EventCard: View {
     let event: CountEvent
     let now: Date
+    var previewImage: UIImage? = nil
 
     private var reading: CountReading { DayCount.reading(for: event, now: now) }
 
@@ -187,7 +199,7 @@ struct EventCard: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 176)
-        .background { EventBackground(event: event) }
+        .background { EventBackground(event: event, previewImage: previewImage) }
         .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(event.title). \(reading.direction), \(reading.number) \(reading.unitLabel).")
