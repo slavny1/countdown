@@ -16,6 +16,8 @@ struct EventEditor: View {
     @State private var palette: EventPalette
     @State private var symbol: String
     @State private var mask: PhotoMask
+    @State private var maskColorHex: String
+    @State private var countsUp: Bool
     @State private var maskOpacity: Double
     @State private var style: CardStyle
     @State private var showCustomizer = false
@@ -38,6 +40,8 @@ struct EventEditor: View {
         _palette = State(initialValue: event?.palette ?? .coral)
         _symbol = State(initialValue: event?.symbol ?? "sparkles")
         _mask = State(initialValue: event?.mask ?? .black)
+        _maskColorHex = State(initialValue: event?.maskColorHex ?? "000000")
+        _countsUp = State(initialValue: event?.countsUp ?? false)
         _maskOpacity = State(initialValue: event?.maskOpacity ?? 0.55)
         _style = State(initialValue: event?.style ?? CardStyle())
     }
@@ -58,7 +62,8 @@ struct EventEditor: View {
                    palette: palette, symbol: symbol, note: note, unit: unit,
                    showsMilestones: showsMilestones,
                    photoFilename: removePhoto ? nil : existingEvent?.photoFilename,
-                   mask: mask, maskOpacity: maskOpacity, style: style)
+                   mask: mask, maskOpacity: maskOpacity,
+                   maskColorHex: maskColorHex, style: style, countsUp: countsUp)
     }
 
     var body: some View {
@@ -70,6 +75,26 @@ struct EventEditor: View {
                         .accessibilityIdentifier("eventTitle")
                     DatePicker("Дата", selection: $selectedDate, displayedComponents: .date)
                         .accessibilityIdentifier("eventDate")
+                    HStack {
+                        Spacer()
+                        Button {
+                            selectedDate = .now
+                            includesTime = true
+                        } label: {
+                            Label("Сейчас", systemImage: "clock.arrow.circlepath")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Toggle("Считать время с этой даты", isOn: $countsUp)
+                    if countsUp {
+                        Button {
+                            selectedDate = .now
+                            includesTime = true
+                        } label: {
+                            Label("Начать заново с текущего момента", systemImage: "arrow.counterclockwise")
+                        }
+                        .accessibilityIdentifier("restartCounter")
+                    }
                     Toggle("Указать время", isOn: $includesTime)
                     if includesTime {
                         DatePicker("Время", selection: $selectedDate, displayedComponents: .hourAndMinute)
@@ -89,86 +114,21 @@ struct EventEditor: View {
                     Text("Автоматически: дни → часы за 24 часа → минуты за час до события. После события — дни. Круглые даты: 1, 7, 10, 30, 50, 100, 200 дней; месяц, полгода, год и юбилеи.")
                 }
 
-                Section("Оформление карточки") {
+                Section("Оформление и фото") {
                     Button {
                         showCustomizer = true
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "textformat.size")
-                                .font(.title2)
-                                .frame(width: 40, height: 40)
-                                .background(.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Настроить стиль")
-                                    .font(.headline)
-                                Text("Шрифт, цвет, размер, расположение")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
+                        HStack {
+                            Label("Открыть редактор карточки и виджетов",
+                                  systemImage: "slider.horizontal.3")
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption.bold())
-                                .foregroundStyle(.tertiary)
                         }
                     }
-                    .foregroundStyle(.primary)
                     .accessibilityIdentifier("customizeCard")
-                }
-
-                Section("Фон") {
-                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label(displayedImage == nil ? "Выбрать фотографию" : "Заменить фотографию",
-                              systemImage: "photo")
-                    }
-                    if let displayedImage {
-                        Image(uiImage: displayedImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 145)
-                            .frame(maxWidth: .infinity)
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                        Button("Убрать фотографию", role: .destructive) {
-                            removePhoto = true
-                            pendingImage = nil
-                            selectedPhoto = nil
-                        }
-                    }
-                    HStack(spacing: 12) {
-                        ForEach(EventPalette.allCases) { option in
-                            Button {
-                                palette = option
-                                UISelectionFeedbackGenerator().selectionChanged()
-                            } label: {
-                                Circle()
-                                    .fill(option.gradient)
-                                    .frame(width: 42, height: 42)
-                                    .overlay {
-                                        if palette == option {
-                                            Image(systemName: "checkmark")
-                                                .foregroundStyle(.white)
-                                        }
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(option.title)
-                            .accessibilityAddTraits(palette == option ? [.isSelected] : [])
-                        }
-                    }
-                    Picker("Цвет затемнения", selection: $mask) {
-                        ForEach(PhotoMask.allCases) { color in
-                            Text(color.title).tag(color)
-                        }
-                    }
-                    HStack {
-                        Text("Затемнение")
-                        Slider(value: $maskOpacity, in: 0.2...0.9, step: 0.05)
-                        Text("\(Int(maskOpacity * 100))%")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(width: 46, alignment: .trailing)
-                    }
-                    .disabled(displayedImage == nil)
+                    WidgetCardPreview(event: previewEvent, image: displayedImage, wide: true)
+                        .frame(height: 158)
+                        .allowsHitTesting(false)
                 }
 
                 Section("Символ") {
@@ -203,24 +163,12 @@ struct EventEditor: View {
                         .accessibilityIdentifier("saveEvent")
                 }
             }
-            .onChange(of: selectedPhoto) { _, selection in
-                guard let selection else { return }
-                Task {
-                    do {
-                        guard let data = try await selection.loadTransferable(type: Data.self),
-                              let image = UIImage(data: data) else {
-                            photoError = true
-                            return
-                        }
-                        pendingImage = image
-                        removePhoto = false
-                    } catch {
-                        photoError = true
-                    }
-                }
-            }
+
             .sheet(isPresented: $showCustomizer) {
-                CardStyleCustomizer(style: $style, previewEvent: previewEvent)
+                CardStyleCustomizer(style: $style, palette: $palette,
+                                    maskColorHex: $maskColorHex, maskOpacity: $maskOpacity,
+                                    selectedPhoto: $selectedPhoto, pendingImage: $pendingImage,
+                                    removePhoto: $removePhoto, previewEvent: previewEvent)
             }
             .alert("Не удалось открыть фото", isPresented: $photoError) {
                 Button("ОК", role: .cancel) { }
@@ -246,7 +194,8 @@ struct EventEditor: View {
             palette: palette, symbol: symbol,
             note: note, unit: unit,
             showsMilestones: showsMilestones, photoFilename: filename,
-            mask: mask, maskOpacity: maskOpacity, style: style
+            mask: mask, maskOpacity: maskOpacity,
+            maskColorHex: maskColorHex, style: style, countsUp: countsUp
         )
         if existingEvent == nil { store.add(event) }
         else { store.update(event) }
