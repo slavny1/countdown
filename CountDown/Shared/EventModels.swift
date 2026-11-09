@@ -156,6 +156,9 @@ struct CountEvent: Identifiable, Codable, Hashable {
     var mask: PhotoMask
     var maskOpacity: Double
     var maskColorHex: String
+    var photoZoom: Double
+    var photoFocusX: Double
+    var photoFocusY: Double
     var style: CardStyle
     var countsUp: Bool
 
@@ -164,7 +167,9 @@ struct CountEvent: Identifiable, Codable, Hashable {
          note: String = "", unit: CountUnit = .automatic,
          showsMilestones: Bool = true, photoFilename: String? = nil,
          mask: PhotoMask = .black, maskOpacity: Double = 0.55,
-         maskColorHex: String? = nil, style: CardStyle = CardStyle(), countsUp: Bool = false) {
+         maskColorHex: String? = nil, photoZoom: Double = 1,
+         photoFocusX: Double = 0.5, photoFocusY: Double = 0.5,
+         style: CardStyle = CardStyle(), countsUp: Bool = false) {
         self.id = id
         self.title = title
         self.date = date
@@ -177,13 +182,17 @@ struct CountEvent: Identifiable, Codable, Hashable {
         self.mask = mask
         self.maskOpacity = min(max(maskOpacity, 0), 0.9)
         self.maskColorHex = maskColorHex ?? mask.legacyHex
+        self.photoZoom = min(max(photoZoom, 1), 2.5)
+        self.photoFocusX = min(max(photoFocusX, 0), 1)
+        self.photoFocusY = min(max(photoFocusY, 0), 1)
         self.style = style
         self.countsUp = countsUp
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, date, palette, symbol, note, unit
-        case showsMilestones, photoFilename, mask, maskOpacity, maskColorHex, style, countsUp
+        case showsMilestones, photoFilename, mask, maskOpacity, maskColorHex
+        case photoZoom, photoFocusX, photoFocusY, style, countsUp
     }
 
     // Older events only contain id, title, date, palette, and symbol.
@@ -201,6 +210,9 @@ struct CountEvent: Identifiable, Codable, Hashable {
         mask = try c.decodeIfPresent(PhotoMask.self, forKey: .mask) ?? .black
         maskOpacity = min(max(try c.decodeIfPresent(Double.self, forKey: .maskOpacity) ?? 0.55, 0), 0.9)
         maskColorHex = try c.decodeIfPresent(String.self, forKey: .maskColorHex) ?? mask.legacyHex
+        photoZoom = min(max(try c.decodeIfPresent(Double.self, forKey: .photoZoom) ?? 1, 1), 2.5)
+        photoFocusX = min(max(try c.decodeIfPresent(Double.self, forKey: .photoFocusX) ?? 0.5, 0), 1)
+        photoFocusY = min(max(try c.decodeIfPresent(Double.self, forKey: .photoFocusY) ?? 0.5, 0), 1)
         style = try c.decodeIfPresent(CardStyle.self, forKey: .style) ?? CardStyle()
         countsUp = try c.decodeIfPresent(Bool.self, forKey: .countsUp) ?? false
     }
