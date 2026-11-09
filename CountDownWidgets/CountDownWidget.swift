@@ -24,8 +24,7 @@ private enum SharedEvents {
               ) else { return nil }
         let url = directory.appendingPathComponent("EventPhotos", isDirectory: true)
             .appendingPathComponent(name)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
+        return UIImage(contentsOfFile: url.path)
     }
 }
 
@@ -35,10 +34,11 @@ private struct WidgetDay: Decodable {
     let day: Int
     let hour: Int?
     let minute: Int?
+    let second: Int?
 
     func date(in calendar: Calendar = .current) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day,
-                                           hour: hour ?? 0, minute: minute ?? 0))
+                                           hour: hour ?? 0, minute: minute ?? 0, second: second ?? 0))
         ?? calendar.startOfDay(for: .now)
     }
 }
@@ -97,6 +97,8 @@ private struct WidgetEvent: Decodable {
     let photoFilename: String?
     let mask: String?
     let maskOpacity: Double?
+    let maskColorHex: String?
+    let countsUp: Bool?
     let style: WidgetCardStyle?
 
     func calendarDays(from now: Date, calendar: Calendar = .current) -> Int {
@@ -107,12 +109,17 @@ private struct WidgetEvent: Decodable {
 
     func reading(now: Date, calendar: Calendar = .current) -> WidgetReading {
         let remaining = date.date(in: calendar).timeIntervalSince(now)
-        let isFuture = remaining >= 0
-        let seconds = abs(remaining)
+        let countUp = countsUp ?? false
+        let isFuture = !countUp && remaining >= 0
+        let seconds = countUp ? max(0, -remaining) : abs(remaining)
         let selected: String
         if (unit ?? "automatic") == "automatic" {
-            selected = !isFuture || seconds >= 86_400 ? "days"
-                     : seconds >= 3_600 ? "hours" : "minutes"
+            if countUp {
+                selected = seconds >= 86_400 ? "days" : seconds >= 3_600 ? "hours" : "minutes"
+            } else {
+                selected = !isFuture || seconds >= 86_400 ? "days"
+                         : seconds >= 3_600 ? "hours" : "minutes"
+            }
         } else {
             selected = unit ?? "days"
         }
@@ -138,6 +145,13 @@ private struct WidgetEvent: Decodable {
     }
 
     var maskColor: Color {
+        if let maskColorHex, let rgb = UInt64(maskColorHex, radix: 16) {
+            return Color(.sRGB,
+                         red: Double((rgb >> 16) & 0xff) / 255,
+                         green: Double((rgb >> 8) & 0xff) / 255,
+                         blue: Double(rgb & 0xff) / 255,
+                         opacity: 1)
+        }
         switch mask {
         case "navy": Color(red: 0.08, green: 0.16, blue: 0.34)
         case "plum": Color(red: 0.33, green: 0.12, blue: 0.29)
@@ -353,38 +367,58 @@ private struct CountWidgetFace: View {
                     Text(entry.reading.direction.uppercased())
                         .font(.system(size: 9, weight: .heavy))
                 }
-            default:
-                VStack(alignment: style.centered ? .center : .leading, spacing: 2) {
-                    HStack(spacing: 5) {
-                        Image(systemName: entry.event?.symbol ?? "calendar")
+            case .systemMedium:
+                HStack(alignment: .center, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(entry.reading.direction.uppercased())
-                            .tracking(1.2)
-                        Spacer(minLength: 0)
-                    }
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    Spacer(minLength: 0)
-                    Group {
-                        if style.placementBelow {
-                            VStack(alignment: style.centered ? .center : .leading, spacing: -2) {
-                                numberText
-                                unitText
-                            }
-                        } else {
-                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                numberText
-                                unitText
-                            }
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .tracking(1.4)
+                        Text(entry.event?.title ?? "Создай событие")
+                            .font(.system(size: 21, weight: .bold, design: style.design))
+                            .lineLimit(2)
+                        if let date = entry.event?.date.date() {
+                            Text(date.formatted(.dateTime.day().month(.wide)))
+                                .font(.caption.weight(.medium))
+                                .opacity(0.85)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: style.centered ? .center : .leading)
-                    Text(entry.event?.title ?? "Создай событие")
-                        .font(.system(size: family == .systemMedium ? 20 : 16,
-                                      weight: .bold, design: style.design))
-                        .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text(entry.reading.number, format: .number)
+                            .font(.system(size: 76 * CGFloat(min(max(style.scale, 0.75), 1.45)),
+                                          weight: style.weight, design: style.design))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.3)
+                        Text(entry.reading.label)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .foregroundStyle(style.color)
                 .padding(2)
-            }
+            default:
+                VStack(alignment: style.centered ? .center : .leading, spacing: 5) {
+                    Text(entry.reading.direction.uppercased())
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .tracking(1)
+                    Spacer(minLength: 0)
+                    Text(entry.reading.number, format: .number)
+                        .font(.system(size: 74 * CGFloat(min(max(style.scale, 0.75), 1.45)),
+                                      weight: style.weight, design: style.design))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.3)
+                    Text(entry.reading.label)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    Text(entry.event?.title ?? "Создай событие")
+                        .font(.system(size: 15, weight: .bold, design: style.design))
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: style.centered ? .center : .leading)
+                .foregroundStyle(style.color)
+                .padding(2)
         }
         .containerBackground(for: .widget) {
             WidgetBackground(event: entry.event)
