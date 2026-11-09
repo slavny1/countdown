@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct EventDetail: View {
     let event: CountEvent
