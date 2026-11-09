@@ -5,6 +5,7 @@ struct EventDetail: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: EventStore
     @State private var showingSettings = false
+    @State private var previewWide = true
 
     private var currentEvent: CountEvent {
         store.events.first(where: { $0.id == event.id }) ?? event
@@ -56,6 +57,27 @@ struct EventDetail: View {
                                 .font(.body)
                                 .textSelection(.enabled)
                         }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Предпросмотр виджета")
+                                .font(.title2.bold())
+                            Spacer()
+                            Button("Настроить") { showingSettings = true }
+                                .font(.subheadline)
+                        }
+                        Picker("Размер", selection: $previewWide) {
+                            Text("Малый").tag(false)
+                            Text("Широкий").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        WidgetCardPreview(event: liveEvent,
+                                          image: EventPhotoStore.image(named: liveEvent.photoFilename),
+                                          wide: previewWide)
+                            .frame(maxWidth: previewWide ? .infinity : 190)
+                            .frame(height: 170)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
