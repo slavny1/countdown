@@ -11,7 +11,6 @@ private enum EditorRoute: Identifiable {
         case .edit(let event): event.id.uuidString
         }
     }
-
     var event: CountEvent? {
         if case .edit(let event) = self { return event }
         return nil
@@ -20,8 +19,9 @@ private enum EditorRoute: Identifiable {
 
 struct ContentView: View {
     @EnvironmentObject private var store: EventStore
-    @State private var editor: EditorRoute?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var editor: EditorRoute?
+    @State private var selectedEvent: CountEvent?
 
     private var sortedEvents: [CountEvent] {
         store.events.sorted { $0.date.date() < $1.date.date() }
@@ -29,67 +29,75 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("КАЖДЫЙ ДЕНЬ ИМЕЕТ ЗНАЧЕНИЕ")
-                            .font(.caption2.weight(.bold))
-                            .tracking(2)
-                            .foregroundStyle(.secondary)
-                        Text("Считай моменты.")
-                            .font(.system(size: 34, weight: .heavy, design: .rounded))
-                            .tracking(-1)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Дни")
+                            .font(.system(size: 44, weight: .bold, design: .serif))
+                            .tracking(-2.5)
                             .accessibilityAddTraits(.isHeader)
+                        Text("Даты, которые имеют значение")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 10)
+                    Spacer()
                     Button {
-                        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         editor = .create
                     } label: {
                         Image(systemName: "plus")
-                            .font(.title3.weight(.bold))
-                            .frame(width: 52, height: 52)
-                            .background(.primary.opacity(0.09), in: Circle())
+                            .font(.title3.weight(.semibold))
+                            .frame(width: 46, height: 46)
+                            .background(.primary.opacity(0.08), in: Circle())
                     }
                     .accessibilityLabel("Добавить событие")
                     .accessibilityIdentifier("addEvent")
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-                .padding(.bottom, 14)
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 12)
 
                 if store.events.isEmpty {
                     ContentUnavailableView {
-                        Label("Пока нет событий", systemImage: "calendar.badge.plus")
+                        Label("Нет событий", systemImage: "calendar.badge.plus")
                     } description: {
-                        Text("Сохрани дату, которую ждёшь или хочешь помнить.")
+                        Text("Добавь дату, которую ждёшь или хочешь сохранить.")
                     } actions: {
-                        Button("Создать событие") { editor = .create }
+                        Button("Создать") { editor = .create }
                             .buttonStyle(.borderedProminent)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List {
-                        ForEach(sortedEvents) { event in
-                            Button {
-                                editor = .edit(event)
-                            } label: {
-                                EventCard(event: event)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) { store.remove(event) } label: {
-                                    Label("Удалить", systemImage: "trash")
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        List {
+                            ForEach(sortedEvents) { event in
+                                Button {
+                                    selectedEvent = event
+                                } label: {
+                                    EventCard(event: event, now: context.date)
+                                }
+                                .buttonStyle(.plain)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button {
+                                        editor = .edit(event)
+                                    } label: {
+                                        Label("Изменить", systemImage: "pencil")
+                                    }
+                                    .tint(.indigo)
+                                    Button(role: .destructive) {
+                                        store.remove(event)
+                                    } label: {
+                                        Label("Удалить", systemImage: "trash")
+                                    }
                                 }
                             }
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .animation(reduceMotion ? nil : .smooth, value: store.events)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .animation(reduceMotion ? nil : .smooth, value: store.events)
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
@@ -98,11 +106,15 @@ struct ContentView: View {
                 EventEditor(event: route.event)
                     .environmentObject(store)
             }
+            .sheet(item: $selectedEvent) { event in
+                NavigationStack {
+                    EventDetail(event: store.events.first(where: { $0.id == event.id }) ?? event)
+                }
+            }
         }
     }
 }
 
 #Preview {
-    ContentView()
-        .environmentObject(EventStore())
+    ContentView().environmentObject(EventStore())
 }

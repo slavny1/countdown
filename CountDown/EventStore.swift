@@ -1,4 +1,3 @@
-import Foundation
 import SwiftUI
 import WidgetKit
 
@@ -19,6 +18,7 @@ final class EventStore: ObservableObject {
 
     func remove(_ event: CountEvent) {
         events.removeAll { $0.id == event.id }
+        EventPhotoStore.remove(named: event.photoFilename)
         persist()
     }
 

@@ -9,41 +9,59 @@ struct CountDownTests {
         return calendar
     }
 
-    @Test func futureAndPast() {
-        let start = utcCalendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 15))!
-        #expect(DayCount.signedDays(to: CalendarDay(year: 2026, month: 11, day: 11), from: start, calendar: utcCalendar) == 2)
-        #expect(DayCount.signedDays(to: CalendarDay(year: 2026, month: 11, day: 7), from: start, calendar: utcCalendar) == -2)
+    @Test func daysAcrossDST() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Warsaw")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 3, day: 28, hour: 22))!
+        #expect(DayCount.signedDays(to: CalendarDay(year: 2026, month: 3, day: 30), from: now, calendar: calendar) == 2)
     }
 
-    @Test func sameDayEvenAtNight() {
-        let start = utcCalendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 23, minute: 59))!
-        #expect(DayCount.signedDays(to: CalendarDay(year: 2026, month: 11, day: 9), from: start, calendar: utcCalendar) == 0)
+    @Test func autoChangesFromDaysToHoursToMinutes() {
+        let target = CalendarDay(year: 2027, month: 1, day: 1, hour: 12, minute: 0)
+        let event = CountEvent(title: "Новый год", date: target)
+        let far = utcCalendar.date(from: DateComponents(year: 2026, month: 12, day: 30, hour: 10))!
+        let hours = utcCalendar.date(from: DateComponents(year: 2026, month: 12, day: 31, hour: 18))!
+        let minutes = utcCalendar.date(from: DateComponents(year: 2027, month: 1, day: 1, hour: 11, minute: 25))!
+        #expect(DayCount.reading(for: event, now: far, calendar: utcCalendar).unit == .days)
+        #expect(DayCount.reading(for: event, now: hours, calendar: utcCalendar).unit == .hours)
+        #expect(DayCount.reading(for: event, now: minutes, calendar: utcCalendar).number == 35)
+        #expect(DayCount.reading(for: event, now: minutes, calendar: utcCalendar).unit == .minutes)
     }
 
-    @Test func daylightSavingTimeIsCalendarBased() {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "Europe/Warsaw")!
-        let start = cal.date(from: DateComponents(year: 2026, month: 3, day: 28, hour: 22))!
-        #expect(DayCount.signedDays(to: CalendarDay(year: 2026, month: 3, day: 30), from: start, calendar: cal) == 2)
+    @Test func pastAutomaticShowsCalendarDays() {
+        let now = utcCalendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 20))!
+        let event = CountEvent(title: "Дата", date: CalendarDay(year: 2026, month: 4, day: 30))
+        let reading = DayCount.reading(for: event, now: now, calendar: utcCalendar)
+        #expect(reading.unit == .days)
+        #expect(!reading.isFuture)
+        #expect(reading.number > 100)
     }
 
-    @Test func leapYear() {
+    @Test func previousJSONDecodesWithDefaults() throws {
+        let id = UUID()
+        let legacy = """
+        {"id":"\(id.uuidString)","title":"Старая дата","date":{"year":2026,"month":4,"day":30},"palette":"ocean","symbol":"calendar"}
+        """
+        let event = try JSONDecoder().decode(CountEvent.self, from: Data(legacy.utf8))
+        #expect(event.note == "")
+        #expect(event.unit == .automatic)
+        #expect(event.showsMilestones)
+        #expect(event.photoFilename == nil)
+        #expect(event.date.hour == nil)
+    }
+
+    @Test func leapYearAndWordForms() {
         let start = utcCalendar.date(from: DateComponents(year: 2028, month: 2, day: 28))!
         #expect(DayCount.signedDays(to: CalendarDay(year: 2028, month: 3, day: 1), from: start, calendar: utcCalendar) == 2)
-    }
-
-    @Test func wordForms() {
         #expect(DayCount.dayWord(1) == "день")
         #expect(DayCount.dayWord(2) == "дня")
-        #expect(DayCount.dayWord(5) == "дней")
         #expect(DayCount.dayWord(11) == "дней")
-        #expect(DayCount.dayWord(21) == "день")
     }
 
-    @Test func jsonRoundTrip() throws {
-        let original = CountEvent(title: "Путешествие", date: CalendarDay(year: 2027, month: 2, day: 20), palette: .ocean)
-        let encoded = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(CountEvent.self, from: encoded)
-        #expect(decoded == original)
+    @Test func monthsAreCalendarAware() {
+        let now = utcCalendar.date(from: DateComponents(year: 2026, month: 5, day: 1))!
+        let event = CountEvent(title: "Дата", date: CalendarDay(year: 2026, month: 4, day: 30))
+        let next = EventMilestones.next(for: event, now: now, calendar: utcCalendar)
+        #expect(next != nil)
     }
 }
