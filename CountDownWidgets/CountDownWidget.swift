@@ -431,6 +431,7 @@ private struct CountWidgetFace: View {
                 .frame(maxWidth: .infinity, alignment: style.centered ? .center : .leading)
                 .foregroundStyle(style.color)
                 .padding(2)
+            }
         }
         .containerBackground(for: .widget) {
             WidgetBackground(event: entry.event)
