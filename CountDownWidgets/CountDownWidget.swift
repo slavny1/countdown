@@ -267,6 +267,18 @@ private struct CountProvider: AppIntentTimelineProvider {
                 next = min(next, event.date.date(in: calendar).addingTimeInterval(2))
             }
         }
+        if let event = entry.event, event.countsUp == true {
+            // Refresh elapsed counters too, not just countdowns.
+            if entry.reading.unit == "minutes" {
+                next = min(next, now.addingTimeInterval(60))
+            } else if entry.reading.unit == "hours" {
+                next = min(next, now.addingTimeInterval(300))
+            }
+            let elapsed = now.timeIntervalSince(event.date.date())
+            for threshold in [3_600.0, 86_400.0] where elapsed < threshold {
+                next = min(next, now.addingTimeInterval(threshold - elapsed + 1))
+            }
+        }
         return Timeline(entries: [entry], policy: .after(max(now.addingTimeInterval(30), next)))
     }
 
