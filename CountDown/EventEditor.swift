@@ -58,7 +58,7 @@ struct EventEditor: View {
     private var previewEvent: CountEvent {
         CountEvent(id: existingEvent?.id ?? UUID(),
                    title: trimmedTitle.isEmpty ? "Моё событие" : trimmedTitle,
-                   date: CalendarDay(date: selectedDate, includesTime: includesTime),
+                   date: CalendarDay(date: selectedDate, includesTime: includesTime, includesSeconds: countsUp),
                    palette: palette, symbol: symbol, note: note, unit: unit,
                    showsMilestones: showsMilestones,
                    photoFilename: removePhoto ? nil : existingEvent?.photoFilename,
@@ -190,7 +190,7 @@ struct EventEditor: View {
 
         let event = CountEvent(
             id: id, title: trimmedTitle,
-            date: CalendarDay(date: selectedDate, includesTime: includesTime),
+            date: CalendarDay(date: selectedDate, includesTime: includesTime, includesSeconds: countsUp),
             palette: palette, symbol: symbol,
             note: note, unit: unit,
             showsMilestones: showsMilestones, photoFilename: filename,
