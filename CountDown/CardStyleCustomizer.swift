@@ -322,7 +322,7 @@ struct WidgetCardPreview: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     VStack(alignment: .trailing, spacing: 0) {
                         Text(count.number, format: .number)
-                            .font(.system(size: 76 * min(max(event.style.scale, 0.75), 1.45),
+                            .font(.system(size: 76 * CGFloat(min(max(event.style.scale, 0.75), 1.45)),
                                           weight: event.style.thickness.fontWeight,
                                           design: event.style.typeface.fontDesign))
                             .monospacedDigit()
@@ -341,7 +341,7 @@ struct WidgetCardPreview: View {
                         .tracking(1)
                     Spacer(minLength: 0)
                     Text(count.number, format: .number)
-                        .font(.system(size: 74 * min(max(event.style.scale, 0.75), 1.45),
+                        .font(.system(size: 74 * CGFloat(min(max(event.style.scale, 0.75), 1.45)),
                                       weight: event.style.thickness.fontWeight,
                                       design: event.style.typeface.fontDesign))
                         .minimumScaleFactor(0.3)
