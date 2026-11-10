@@ -373,7 +373,9 @@ enum DayCount {
             }
         }
         if selected.automatic {
-            return [reading(for: event, now: now, calendar: calendar)]
+            var automaticEvent = event
+            automaticEvent.unit = .automatic
+            return [reading(for: automaticEvent, now: now, calendar: calendar)]
         }
         let target = event.date.date(in: calendar)
         let isFuture = !event.countsUp && target > now
