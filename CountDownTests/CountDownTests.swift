@@ -163,6 +163,18 @@ struct CountDownTests {
         #expect(DayCount.readings(for: event, now: now, calendar: utcCalendar)[0].number == 310)
     }
 
+    @Test func automaticCanBeReenabledAfterLegacyHours() {
+        let now = utcCalendar.date(from: DateComponents(year: 2027, month: 1, day: 1,
+                                                        hour: 10, minute: 0))!
+        var event = CountEvent(title: "Пример",
+                               date: CalendarDay(year: 2027, month: 1, day: 5, hour: 10),
+                               unit: .hours)
+        event.displayUnits = TimeUnitSelection()
+        let display = DayCount.readings(for: event, now: now, calendar: utcCalendar)
+        #expect(display.count == 1)
+        #expect(display[0].unit == .days)
+    }
+
     @Test func nowIsShownOnlyOnEventCalendarDay() {
         let event = CountEvent(title: "День",
             date: CalendarDay(year: 2027, month: 5, day: 3, hour: 13, minute: 30))
