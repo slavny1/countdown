@@ -264,6 +264,8 @@ struct WidgetPresetEditor: View {
                             draft.photoFilename = nil
                             pickedPhoto = nil
                             pendingPhoto = nil
+                            draft.backgroundColorHex = nil
+                            chooseContrast()
                         } label: {
                             Label("Удалить фото", systemImage: "trash")
                         }
