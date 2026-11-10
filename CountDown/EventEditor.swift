@@ -120,7 +120,7 @@ struct EventEditor: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
 
-                Section("Что показывать") {
+                Section {
                     Toggle("Автоматически", isOn: $displayUnits.automatic)
                     if !displayUnits.automatic {
                         Toggle("Дни", isOn: Binding(
@@ -137,6 +137,8 @@ struct EventEditor: View {
                         ))
                     }
                     Toggle("Круглые даты", isOn: $showsMilestones)
+                } header: {
+                    Text("Что показывать")
                 } footer: {
                     Text("В автоматическом режиме дни сменяются часами и минутами. При выборе нескольких единиц показывается составное время.")
                 }
