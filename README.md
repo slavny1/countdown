@@ -59,3 +59,26 @@ Appearance persists per event and is read by Home Screen widgets. Lock Screen ac
 6. Build the app, WidgetKit extension and tests in Xcode. GitHub connector changes are not compiled locally.
 
 Existing signing, App Group and Copy only when installing build settings were left unchanged.
+
+## Visual interaction pass (feat/card-interactions-v2)
+
+- Event cards reveal a scrollable note panel underneath on tap. "Открыть событие" opens full details; events without a note still open directly.
+- Long-press and drag to reorder cards; pin/unpin in the left-swipe menu. Pinned cards sort above unpinned cards; the pin icon is only visible on pinned cards.
+- Cards and widget previews show the full date including year, and time when set. The event title uses the chosen font family/weight and responds to its scale.
+- The event editor puts **Сейчас** beside the date and removes its redundant restart button. The subtle **Обнулить счётчик** action is at the bottom of event details.
+- The event detail section is named **Виджеты**, with an icon settings control and vertically stacked small/wide previews.
+- The live design editor uses explicit section buttons instead of a segmented Form; the layout tab is removed. Typography includes continuous size and stepped weight sliders.
+- Added a fifth background gradient, plus reusable custom solid-color swatches via the + button. Photo masks offer two dark and two light swatches, plus custom colors stored in app preferences. Opacity stays adjustable. Photo-mask controls only show when a photo exists.
+- The widget extension uses the same custom background color, font weight, font family, and scaling as event cards.
+
+### iPhone verification checklist
+1. Build both app and widget extension in Xcode and run tests. This GitHub integration has not executed Xcode.
+2. Switch between typography, color, and background sections and verify controls really change the previews.
+3. Expand a long note and scroll it independently; open full event details via the button.
+4. Drag an event and pin/unpin via swipe; force-quit and reopen the app to verify ordering persists.
+5. Test custom background and mask swatches, including after reopening the editor.
+6. Compare small and wide WidgetKit instances with in-app previews after updating their event.
+7. Check large numbers and heavy type at maximum slider values for clipping.
+8. Verify reset is only available for elapsed-time events and appears after all event details.
+
+This branch is based on feat/widget-photo-preview-reset, leaving main and prior feature branches unchanged. No project signing or widget-embedding settings were modified here.
