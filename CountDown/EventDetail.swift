@@ -6,6 +6,7 @@ struct EventDetail: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: EventStore
     @State private var showingSettings = false
+    @State private var showingWidgets = false
 
     private var currentEvent: CountEvent {
         store.events.first(where: { $0.id == event.id }) ?? event
@@ -33,7 +34,7 @@ struct EventDetail: View {
                                 .tracking(1.5)
                             Spacer()
                         }
-                        EventNumber(reading: reading, large: true, style: liveEvent.style)
+                        EventTimeDisplay(event: liveEvent, now: context.date, large: true)
                             .frame(maxWidth: .infinity, alignment: liveEvent.style.swiftUIAlignment)
                         Text(liveEvent.title)
                             .font(.system(size: 32 * CGFloat(min(max(liveEvent.style.scale, 0.7), 1.6)),
@@ -68,7 +69,7 @@ struct EventDetail: View {
                                 .font(.title2.bold())
                             Spacer()
                             Button {
-                                showingSettings = true
+                                showingWidgets = true
                             } label: {
                                 Image(systemName: "slider.horizontal.3")
                                     .font(.title3)
@@ -77,12 +78,22 @@ struct EventDetail: View {
                             }
                             .accessibilityLabel("Настроить виджеты")
                         }
-                        HStack {
+                        HStack(spacing: 14) {
                             WidgetCardPreview(event: liveEvent,
                                               image: EventPhotoStore.image(named: liveEvent.photoFilename),
                                               wide: false)
                                 .frame(width: 172, height: 172)
-                            Spacer()
+                            Button {
+                                showingWidgets = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.title2.weight(.semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 172)
+                                    .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                                in: RoundedRectangle(cornerRadius: 24))
+                            }
+                            .accessibilityLabel("Добавить виджет")
                         }
                         WidgetCardPreview(event: liveEvent,
                                           image: EventPhotoStore.image(named: liveEvent.photoFilename),
@@ -135,6 +146,9 @@ struct EventDetail: View {
         }
         .sheet(isPresented: $showingSettings) {
             EventEditor(event: currentEvent).environmentObject(store)
+        }
+        .sheet(isPresented: $showingWidgets) {
+            WidgetGallery(eventID: event.id).environmentObject(store)
         }
     }
 }
