@@ -59,7 +59,7 @@ struct CardStyleCustomizer: View {
     }
 
     private let maskSwatches = ["141414", "142957", "F0E3D1", "FFFFFF"]
-    private let textSwatches = ["FFFFFF", "1B2029", "F0E3D1", "F6CF59", "C8E9FF"]
+    private let textSwatches = ["FFFFFF", "1B2029", "F6CF59", "C8E9FF"]
 
     private var currentPhoto: UIImage? {
         if removePhoto { return nil }
@@ -302,28 +302,28 @@ struct CardStyleCustomizer: View {
     private var colorControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeading("Цвет текста")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 14) {
-                ForEach(textSwatches + customTextSwatches.filter { !textSwatches.contains($0) },
-                        id: \.self) { hex in
-                    circleColor(hex, selected: style.textColorHex == hex) {
-                        style.textColorHex = hex
-                        customTextColor = Color(rgbHex: hex)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(textSwatches + customTextSwatches.filter { !textSwatches.contains($0) },
+                            id: \.self) { hex in
+                        circleColor(hex, selected: style.textColorHex == hex) {
+                            style.textColorHex = hex
+                            customTextColor = Color(rgbHex: hex)
+                        }
                     }
+                    Button {
+                        customTextColor = Color(rgbHex: style.textColorHex)
+                        editingTextColor = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline)
+                            .frame(width: 43, height: 43)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Добавить цвет текста")
                 }
-                Button {
-                    customTextColor = Color(rgbHex: style.textColorHex)
-                    editingTextColor = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.headline)
-                        .frame(width: 43, height: 43)
-                        .background(.thinMaterial, in: Circle())
-                }
-                .accessibilityLabel("Добавить цвет текста")
             }
-            Text("Собственные цвета сохраняются в палитре")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .frame(height: 50)
         }
     }
 
