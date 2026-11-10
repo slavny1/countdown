@@ -90,10 +90,6 @@ struct EventEditor: View {
                             if next.count > 70 { title = String(next.prefix(70)) }
                         }
                         .accessibilityIdentifier("eventTitle")
-                    Text("\(title.count)/70")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
                     HStack(spacing: 12) {
                         DatePicker("Дата", selection: $selectedDate, displayedComponents: .date)
                             .accessibilityIdentifier("eventDate")
@@ -114,10 +110,6 @@ struct EventEditor: View {
                         .onChange(of: note) { _, next in
                             if next.count > 300 { note = String(next.prefix(300)) }
                         }
-                    Text("\(note.count)/300")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
 
                 Section {
