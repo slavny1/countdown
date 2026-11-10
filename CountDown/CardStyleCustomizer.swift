@@ -2,18 +2,11 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
-private enum PreviewKind: String, CaseIterable, Identifiable {
-    case card = "Карточка"
-    case small = "Виджет"
-    case medium = "Широкий"
-    var id: String { rawValue }
-}
-
-/// One live editor for photos, typography and both Home Screen widget sizes.
-/// The preview uses pending images as well as images already saved in the App Group.
+/// Live editor that never nests a changing Form inside a segmented picker.
 struct CardStyleCustomizer: View {
     @Binding var style: CardStyle
     @Binding var palette: EventPalette
+    @Binding var backgroundColorHex: String?
     @Binding var maskColorHex: String
     @Binding var maskOpacity: Double
     @Binding var photoZoom: Double
@@ -22,23 +15,23 @@ struct CardStyleCustomizer: View {
     @Binding var selectedPhoto: PhotosPickerItem?
     @Binding var pendingImage: UIImage?
     @Binding var removePhoto: Bool
-
     let previewEvent: CountEvent
+
     @Environment(\.dismiss) private var dismiss
+    @State private var section: SectionChoice = .font
+    @State private var customTextColor = Color.white
+    @State private var customBackgroundColor = Color.white
+    @State private var customMaskColor = Color.black
+    @State private var showsCustomBackground = false
+    @State private var showsCustomMask = false
+    @State private var loadError = false
 
-    @State private var tab: EditorTab = .font
-    @State private var preview: PreviewKind = .card
-    @State private var chosenTextColor: Color = .white
-    @State private var chosenMaskColor: Color = .black
-    @State private var photoError = false
-
-    private enum EditorTab: String, CaseIterable, Identifiable {
-        case font = "Шрифт"
-        case color = "Цвет"
-        case background = "Фон"
-        case layout = "Макет"
+    private enum SectionChoice: String, CaseIterable, Identifiable {
+        case font = "Шрифт", color = "Цвет", background = "Фон"
         var id: String { rawValue }
     }
+
+    private let maskSwatches = ["141414", "142957", "F0E3D1", "FFFFFF"]
 
     private var currentPhoto: UIImage? {
         if removePhoto { return nil }
@@ -46,227 +39,90 @@ struct CardStyleCustomizer: View {
     }
 
     private var liveEvent: CountEvent {
-        var event = previewEvent
-        event.style = style
-        event.palette = palette
-        event.maskColorHex = maskColorHex
-        event.maskOpacity = maskOpacity
-        event.photoZoom = photoZoom
-        event.photoFocusX = photoFocusX
-        event.photoFocusY = photoFocusY
-        return event
+        var copy = previewEvent
+        copy.style = style
+        copy.palette = palette
+        copy.backgroundColorHex = backgroundColorHex
+        copy.maskColorHex = maskColorHex
+        copy.maskOpacity = maskOpacity
+        copy.photoZoom = photoZoom
+        copy.photoFocusX = photoFocusX
+        copy.photoFocusY = photoFocusY
+        return copy
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                VStack(spacing: 12) {
-                    Picker("Предпросмотр", selection: $preview) {
-                        ForEach(PreviewKind.allCases) { option in
-                            Text(option.rawValue).tag(option)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        sectionHeading("Карточка")
+                        EventCard(event: liveEvent, now: .now, previewImage: currentPhoto)
+                            .frame(height: 176)
+                        HStack {
+                            sectionHeading("Виджеты")
+                            Spacer()
+                            Text("Предпросмотр")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(alignment: .top, spacing: 14) {
+                            WidgetCardPreview(event: liveEvent, image: currentPhoto, wide: false)
+                                .frame(width: 144, height: 144)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Ближайшая круглая дата")
+                                    .font(.caption.weight(.medium))
+                                if let milestone = EventMilestones.next(for: liveEvent) {
+                                    Text(milestone.title)
+                                        .font(.system(size: 24, weight: .bold, design: .serif))
+                                    Text(milestone.date.formatted(.dateTime.day().month(.abbreviated).year()))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Нет ближайшей даты")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 12)
+                        }
+                        WidgetCardPreview(event: liveEvent, image: currentPhoto, wide: true)
+                            .frame(height: 156)
+                    }
+                    .animation(.easeInOut(duration: 0.15), value: style)
+
+                    HStack(spacing: 8) {
+                        ForEach(SectionChoice.allCases) { choice in
+                            Button {
+                                section = choice
+                                UISelectionFeedbackGenerator().selectionChanged()
+                            } label: {
+                                Text(choice.rawValue)
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .foregroundStyle(section == choice ? Color.white : Color.primary)
+                                    .background(section == choice ? Color.accentColor :
+                                                Color(uiColor: .secondarySystemGroupedBackground),
+                                                in: RoundedRectangle(cornerRadius: 14))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(section == choice ? [.isSelected] : [])
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 18)
+                    .accessibilityIdentifier("styleSections")
 
                     Group {
-                        switch preview {
-                        case .card:
-                            EventCard(event: liveEvent, now: .now, previewImage: currentPhoto)
-                                .frame(height: 176)
-                        case .small:
-                            HStack {
-                                Spacer(minLength: 0)
-                                WidgetCardPreview(event: liveEvent, image: currentPhoto, wide: false)
-                                    .frame(width: 170, height: 170)
-                                Spacer(minLength: 0)
-                            }
-                        case .medium:
-                            WidgetCardPreview(event: liveEvent, image: currentPhoto, wide: true)
-                                .frame(height: 170)
+                        switch section {
+                        case .font: fontControls
+                        case .color: colorControls
+                        case .background: backgroundControls
                         }
                     }
-                    .padding(.horizontal, 18)
-                    .animation(.easeInOut(duration: 0.2), value: preview)
-                    .animation(.easeInOut(duration: 0.15), value: style)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.top, 12)
-                .padding(.bottom, 14)
-
-                Picker("Инструменты", selection: $tab) {
-                    ForEach(EditorTab.allCases) { item in
-                        Text(item.rawValue).tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-
-                Form {
-                    switch tab {
-                    case .font:
-                        Section("Шрифт цифр") {
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                                ForEach(CardTypeface.allCases) { typeface in
-                                    Button {
-                                        style.typeface = typeface
-                                        UISelectionFeedbackGenerator().selectionChanged()
-                                    } label: {
-                                        VStack(spacing: 6) {
-                                            Text("123")
-                                                .font(.system(size: 36, weight: style.thickness.fontWeight,
-                                                              design: typeface.fontDesign))
-                                                .monospacedDigit()
-                                            Text(typeface.title).font(.caption)
-                                        }
-                                        .foregroundStyle(style.typeface == typeface ? Color.accentColor : Color.primary)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(10)
-                                        .background(Color(uiColor: .secondarySystemGroupedBackground),
-                                                    in: RoundedRectangle(cornerRadius: 14))
-                                        .overlay(RoundedRectangle(cornerRadius: 14)
-                                            .stroke(style.typeface == typeface ? Color.accentColor : .clear, lineWidth: 2))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-                        Section("Начертание и размер") {
-                            Picker("Толщина", selection: $style.thickness) {
-                                ForEach(CardThickness.allCases) { value in
-                                    Text(value.title).tag(value)
-                                }
-                            }
-                            HStack {
-                                Text("Размер")
-                                Slider(value: $style.scale, in: 0.75...1.45, step: 0.05)
-                                Text("\(Int((style.scale * 100).rounded()))%")
-                                    .font(.caption.monospacedDigit())
-                                    .frame(width: 45, alignment: .trailing)
-                            }
-                        }
-
-                    case .color:
-                        Section("Цвет текста") {
-                            colorSwatches(selected: $style.textColorHex) { hex in
-                                chosenTextColor = Color(rgbHex: hex)
-                            }
-                            ColorPicker("Другой цвет", selection: $chosenTextColor, supportsOpacity: false)
-                                .onChange(of: chosenTextColor) { _, value in
-                                    style.textColorHex = value.rgbHex
-                                }
-                        }
-
-                    case .background:
-                        Section("Фотография") {
-                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                                Label(currentPhoto == nil ? "Добавить фотографию" : "Изменить фотографию",
-                                      systemImage: "photo.on.rectangle.angled")
-                            }
-                            if currentPhoto != nil {
-                                Button(role: .destructive) {
-                                    removePhoto = true
-                                    pendingImage = nil
-                                    selectedPhoto = nil
-                                } label: {
-                                    Label("Убрать фотографию", systemImage: "trash")
-                                }
-                            }
-                        }
-                        Section("Фон без фото") {
-                            HStack(spacing: 12) {
-                                ForEach(EventPalette.allCases) { value in
-                                    Button {
-                                        palette = value
-                                    } label: {
-                                        Circle()
-                                            .fill(value.gradient)
-                                            .frame(width: 46, height: 46)
-                                            .overlay {
-                                                if palette == value {
-                                                    Image(systemName: "checkmark")
-                                                        .foregroundStyle(.white)
-                                                }
-                                            }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(value.title)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        Section("Цвет маски поверх фото") {
-                            colorSwatches(selected: $maskColorHex) { hex in
-                                chosenMaskColor = Color(rgbHex: hex)
-                            }
-                            ColorPicker("Другой цвет маски", selection: $chosenMaskColor,
-                                        supportsOpacity: false)
-                                .onChange(of: chosenMaskColor) { _, value in
-                                    maskColorHex = value.rgbHex
-                                }
-                            HStack {
-                                Text("Непрозрачность")
-                                Slider(value: $maskOpacity, in: 0...0.9, step: 0.05)
-                                Text("\(Int((maskOpacity * 100).rounded()))%")
-                                    .font(.caption.monospacedDigit())
-                                    .frame(width: 43, alignment: .trailing)
-                            }
-                            .disabled(currentPhoto == nil)
-                            if currentPhoto != nil {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("Кадрирование")
-                                        .font(.subheadline.weight(.semibold))
-                                    HStack {
-                                        Text("Масштаб")
-                                        Slider(value: $photoZoom, in: 1...2.5, step: 0.05)
-                                        Text(String(format: "%.1f×", photoZoom))
-                                            .font(.caption.monospacedDigit())
-                                            .frame(width: 40)
-                                    }
-                                    HStack {
-                                        Text("По горизонтали")
-                                        Slider(value: $photoFocusX, in: 0...1)
-                                    }
-                                    HStack {
-                                        Text("По вертикали")
-                                        Slider(value: $photoFocusY, in: 0...1)
-                                    }
-                                    Button("Центрировать фотографию") {
-                                        photoFocusX = 0.5
-                                        photoFocusY = 0.5
-                                        photoZoom = 1
-                                    }
-                                }
-                            }
-                        }
-
-                    case .layout:
-                        Section("Выравнивание числа") {
-                            Picker("Позиция", selection: $style.alignment) {
-                                ForEach(CardAlignment.allCases) { value in
-                                    Text(value.title).tag(value)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                        }
-                        Section("Подпись рядом с числом") {
-                            Picker("Размещение", selection: $style.unitPlacement) {
-                                ForEach(CardUnitPlacement.allCases) { value in
-                                    Text(value.title).tag(value)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                        }
-                        Section {
-                            Button("Сбросить стиль карточки") {
-                                style = CardStyle()
-                                chosenTextColor = .white
-                            }
-                        }
-                    }
-                }
-                .scrollContentBackground(.hidden)
+                .padding(18)
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .navigationTitle("Оформление")
@@ -277,58 +133,227 @@ struct CardStyleCustomizer: View {
                 }
             }
             .onAppear {
-                chosenTextColor = Color(rgbHex: style.textColorHex)
-                chosenMaskColor = Color(rgbHex: maskColorHex)
+                customTextColor = Color(rgbHex: style.textColorHex)
+                customMaskColor = Color(rgbHex: maskColorHex)
+                customBackgroundColor = Color(rgbHex: backgroundColorHex ?? "F0E3D1")
             }
-            .onChange(of: selectedPhoto) { _, item in
-                guard let item else { return }
+            .onChange(of: selectedPhoto) { _, selection in
+                guard let selection else { return }
                 Task {
-                    do {
-                        guard let data = try await item.loadTransferable(type: Data.self),
-                              let photo = UIImage(data: data) else {
-                            photoError = true
-                            return
-                        }
-                        pendingImage = photo
-                        removePhoto = false
-                    } catch {
-                        photoError = true
+                    guard let data = try? await selection.loadTransferable(type: Data.self),
+                          let photo = UIImage(data: data) else {
+                        loadError = true
+                        return
                     }
+                    pendingImage = photo
+                    removePhoto = false
                 }
             }
-            .alert("Не удалось загрузить фото", isPresented: $photoError) {
-                Button("ОК", role: .cancel) {}
+            .alert("Не удалось открыть фотографию", isPresented: $loadError) {
+                Button("OK", role: .cancel) {}
             }
         }
     }
 
-    private func colorSwatches(selected: Binding<String>, onSelect: @escaping (String) -> Void) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 12) {
-            ForEach(CardColorPalette.swatches, id: \.self) { hex in
-                Button {
-                    selected.wrappedValue = hex
-                    onSelect(hex)
-                } label: {
-                    Circle()
-                        .fill(Color(rgbHex: hex))
-                        .frame(width: 43, height: 43)
-                        .overlay(Circle().stroke(.black.opacity(0.15)))
-                        .overlay {
-                            if selected.wrappedValue == hex {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(hex == "1B2029" ? .white : .black)
-                            }
+    private func sectionHeading(_ title: String) -> some View {
+        Text(title).font(.system(size: 21, weight: .bold, design: .serif))
+    }
+
+    private var fontControls: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            sectionHeading("Шрифт числа и названия")
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(CardTypeface.allCases) { choice in
+                    Button {
+                        style.typeface = choice
+                    } label: {
+                        VStack(spacing: 6) {
+                            Text("123")
+                                .font(.system(size: 37, weight: style.thickness.fontWeight,
+                                              design: choice.fontDesign))
+                            Text(choice.title).font(.caption)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(12)
+                        .foregroundStyle(style.typeface == choice ? Color.accentColor : Color.primary)
+                        .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                    in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14)
+                            .stroke(style.typeface == choice ? Color.accentColor : .clear, lineWidth: 2))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            HStack {
+                Text("Размер цифр")
+                Slider(value: $style.scale, in: 0.7...1.6)
+                    .accessibilityIdentifier("fontScale")
+                Text("\(Int((style.scale * 100).rounded()))%")
+                    .monospacedDigit()
+                    .font(.caption)
+                    .frame(width: 48)
+            }
+            HStack {
+                Text("Толщина")
+                Slider(value: thicknessValue, in: 0...5, step: 1)
+                    .accessibilityIdentifier("fontWeight")
+                Text(style.thickness.title)
+                    .font(.caption)
+                    .frame(width: 90, alignment: .trailing)
+            }
+            Button("Сбросить шрифт") {
+                style.typeface = .editorial
+                style.scale = 1
+                style.thickness = .bold
+            }
+            .font(.subheadline)
+        }
+    }
+
+    private var thicknessValue: Binding<Double> {
+        let cases = CardThickness.allCases
+        return Binding(
+            get: { Double(cases.firstIndex(of: style.thickness) ?? 4) },
+            set: { newValue in
+                let index = min(max(Int(newValue.rounded()), 0), cases.count - 1)
+                style.thickness = cases[index]
+            }
+        )
+    }
+
+    private var colorControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionHeading("Цвет текста")
+            swatches(CardColorPalette.swatches, selected: style.textColorHex) { hex in
+                style.textColorHex = hex
+                customTextColor = Color(rgbHex: hex)
+            }
+            ColorPicker("Другой цвет", selection: $customTextColor, supportsOpacity: false)
+                .onChange(of: customTextColor) { _, value in style.textColorHex = value.rgbHex }
+        }
+    }
+
+    private var backgroundControls: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionHeading("Фотография")
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Label(currentPhoto == nil ? "Добавить фото" : "Заменить фото", systemImage: "photo")
+            }
+            .buttonStyle(.bordered)
+            if currentPhoto != nil {
+                Button("Убрать фото", role: .destructive) {
+                    pendingImage = nil
+                    selectedPhoto = nil
+                    removePhoto = true
+                }
+                .font(.subheadline)
+                HStack {
+                    Text("Масштаб")
+                    Slider(value: $photoZoom, in: 1...2.5)
+                }
+                HStack {
+                    Text("Сдвиг X")
+                    Slider(value: $photoFocusX, in: 0...1)
+                }
+                HStack {
+                    Text("Сдвиг Y")
+                    Slider(value: $photoFocusY, in: 0...1)
+                }
+                sectionHeading("Цвет маски")
+                HStack(spacing: 12) {
+                    ForEach(maskSwatches, id: \.self) { hex in
+                        circleColor(hex, selected: maskColorHex == hex) {
+                            maskColorHex = hex
+                            customMaskColor = Color(rgbHex: hex)
+                        }
+                    }
+                    Button {
+                        showsCustomMask.toggle()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline)
+                            .frame(width: 43, height: 43)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Свой цвет маски")
+                }
+                if showsCustomMask {
+                    ColorPicker("Свой цвет маски", selection: $customMaskColor, supportsOpacity: false)
+                        .onChange(of: customMaskColor) { _, color in maskColorHex = color.rgbHex }
+                }
+                HStack {
+                    Text("Непрозрачность")
+                    Slider(value: $maskOpacity, in: 0...0.9)
+                    Text("\(Int((maskOpacity * 100).rounded()))%")
+                        .font(.caption.monospacedDigit())
+                }
+            } else {
+                sectionHeading("Фон без фото")
+                HStack(spacing: 9) {
+                    ForEach(EventPalette.allCases) { value in
+                        Button {
+                            palette = value
+                            backgroundColorHex = nil
+                        } label: {
+                            Circle()
+                                .fill(value.gradient)
+                                .frame(width: 39, height: 39)
+                                .overlay {
+                                    if palette == value && backgroundColorHex == nil {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(value.title)
+                    }
+                    Button { showsCustomBackground.toggle() } label: {
+                        Image(systemName: "plus")
+                            .font(.headline)
+                            .frame(width: 39, height: 39)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Свой цвет фона")
+                }
+                if showsCustomBackground || backgroundColorHex != nil {
+                    ColorPicker("Цвет фона", selection: $customBackgroundColor, supportsOpacity: false)
+                        .onChange(of: customBackgroundColor) { _, color in
+                            backgroundColorHex = color.rgbHex
                         }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Цвет \(hex)")
             }
         }
-        .padding(.vertical, 6)
+    }
+
+    private func swatches(_ colors: [String], selected: String,
+                          onSelect: @escaping (String) -> Void) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 10) {
+            ForEach(colors, id: \.self) { hex in
+                circleColor(hex, selected: selected == hex) { onSelect(hex) }
+            }
+        }
+    }
+
+    private func circleColor(_ hex: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Circle()
+                .fill(Color(rgbHex: hex))
+                .frame(width: 43, height: 43)
+                .overlay(Circle().strokeBorder(.gray.opacity(0.3)))
+                .overlay {
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(hex == "141414" || hex == "142957" || hex == "1B2029" ? .white : .black)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Цвет \(hex)")
     }
 }
 
-/// Approximation of actual WidgetKit content, with the same compositions and styles.
+/// Same layout as the Home Screen widget. This is a preview, not an actual WidgetKit snapshot.
 struct WidgetCardPreview: View {
     let event: CountEvent
     let image: UIImage?
@@ -345,53 +370,52 @@ struct WidgetCardPreview: View {
                             .font(.system(size: 10, weight: .heavy, design: .rounded))
                             .tracking(1.4)
                         Text(event.title)
-                            .font(.system(size: 21, weight: .bold, design: event.style.typeface.fontDesign))
+                            .font(.system(size: 21, weight: event.style.thickness.fontWeight,
+                                          design: event.style.typeface.fontDesign))
                             .lineLimit(2)
-                        Text(event.date.date().formatted(.dateTime.day().month(.wide)))
+                        Text(event.date.displayLabel)
                             .font(.caption.weight(.medium))
                             .opacity(0.85)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     VStack(alignment: .trailing, spacing: 0) {
                         Text(count.number, format: .number)
-                            .font(.system(size: 76 * CGFloat(min(max(event.style.scale, 0.75), 1.45)),
+                            .font(.system(size: 76 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
                                           weight: event.style.thickness.fontWeight,
                                           design: event.style.typeface.fontDesign))
                             .monospacedDigit()
-                            .minimumScaleFactor(0.4)
+                            .minimumScaleFactor(0.35)
                             .lineLimit(1)
                         Text(count.unitLabel)
                             .font(.subheadline.weight(.semibold))
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .padding(18)
+                .padding(14)
             } else {
-                VStack(alignment: event.style.horizontalAlignment, spacing: 5) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text(count.direction.uppercased())
                         .font(.system(size: 10, weight: .heavy, design: .rounded))
-                        .tracking(1)
                     Spacer(minLength: 0)
                     Text(count.number, format: .number)
-                        .font(.system(size: 74 * CGFloat(min(max(event.style.scale, 0.75), 1.45)),
+                        .font(.system(size: 74 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
                                       weight: event.style.thickness.fontWeight,
                                       design: event.style.typeface.fontDesign))
                         .minimumScaleFactor(0.3)
                         .lineLimit(1)
                         .monospacedDigit()
-                    Text(count.unitLabel)
-                        .font(.caption.weight(.semibold))
+                    Text(count.unitLabel).font(.caption.weight(.semibold))
                     Text(event.title)
-                        .font(.system(size: 15, weight: .bold, design: event.style.typeface.fontDesign))
+                        .font(.system(size: 15, weight: event.style.thickness.fontWeight,
+                                      design: event.style.typeface.fontDesign))
                         .lineLimit(1)
                 }
-                .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
-                .padding(15)
+                .padding(13)
             }
         }
         .foregroundStyle(event.style.textColor)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { EventBackground(event: event, previewImage: image) }
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
     }
 }
