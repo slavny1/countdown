@@ -140,6 +140,68 @@ struct CountDownTests {
         #expect(event.date.displayLabel.contains("2026"))
     }
 
+    @Test func combinedUnitsGiveDaysHoursMinutes() {
+        let now = utcCalendar.date(from: DateComponents(year: 2027, month: 1, day: 2,
+                                                        hour: 10, minute: 0))!
+        let event = CountEvent(title: "Поездка",
+            date: CalendarDay(year: 2027, month: 1, day: 7, hour: 14, minute: 6),
+            displayUnits: TimeUnitSelection(automatic: false, days: true,
+                                            hours: true, minutes: true))
+        let readings = DayCount.readings(for: event, now: now, calendar: utcCalendar)
+        #expect(readings.map(\.number) == [5, 4, 6])
+        #expect(readings.map(\.unit) == [.days, .hours, .minutes])
+    }
+
+    @Test func singleUnitShowsFullHoursAndMinutes() {
+        let now = utcCalendar.date(from: DateComponents(year: 2027, month: 1, day: 2,
+                                                        hour: 10, minute: 0))!
+        var event = CountEvent(title: "Поездка",
+            date: CalendarDay(year: 2027, month: 1, day: 2, hour: 15, minute: 10))
+        event.displayUnits = .fromLegacy(.hours)
+        #expect(DayCount.readings(for: event, now: now, calendar: utcCalendar)[0].number == 6)
+        event.displayUnits = .fromLegacy(.minutes)
+        #expect(DayCount.readings(for: event, now: now, calendar: utcCalendar)[0].number == 310)
+    }
+
+    @Test func nowIsShownOnlyOnEventCalendarDay() {
+        let event = CountEvent(title: "День",
+            date: CalendarDay(year: 2027, month: 5, day: 3, hour: 13, minute: 30))
+        let before = utcCalendar.date(from: DateComponents(year: 2027, month: 5, day: 3,
+                                                           hour: 13, minute: 29))!
+        let onTime = utcCalendar.date(from: DateComponents(year: 2027, month: 5, day: 3,
+                                                           hour: 13, minute: 30))!
+        let nextDay = utcCalendar.date(from: DateComponents(year: 2027, month: 5, day: 4,
+                                                           hour: 12, minute: 30))!
+        #expect(DayCount.phase(for: event, now: before, calendar: utcCalendar) == .waiting)
+        #expect(DayCount.phase(for: event, now: onTime, calendar: utcCalendar) == .now)
+        #expect(DayCount.phase(for: event, now: nextDay, calendar: utcCalendar) == .elapsed)
+    }
+
+    @Test func widgetPresetsAreIndependentAndPersist() throws {
+        let event = CountEvent(title: "Встреча",
+            date: CalendarDay(year: 2027, month: 5, day: 3))
+        var preset = WidgetPreset(event: event, size: .medium)
+        preset.style.scale = 1.5
+        preset.units = TimeUnitSelection(automatic: false, days: true, hours: true, minutes: true)
+        preset.backgroundColorHex = "DDEEFF"
+        let result = preset.applying(to: event)
+        #expect(result.style.scale == 1.5)
+        #expect(event.style.scale == 1)
+        #expect(result.backgroundColorHex == "DDEEFF")
+        let restored = try JSONDecoder().decode(WidgetPreset.self,
+                                                 from: JSONEncoder().encode(preset))
+        #expect(restored == preset)
+    }
+
+    @Test func oldEventsPreserveAutomaticDisplayUnits() throws {
+        let legacy = """
+        {"id":"00000000-0000-0000-0000-000000000090","title":"Старое","date":{"year":2026,"month":4,"day":30},"palette":"ocean","symbol":"calendar","unit":"hours"}
+        """
+        let event = try JSONDecoder().decode(CountEvent.self, from: Data(legacy.utf8))
+        #expect(!event.displayUnits.automatic)
+        #expect(event.displayUnits.selected == [.hours])
+    }
+
     @Test func monthsAreCalendarAware() {
         let now = utcCalendar.date(from: DateComponents(year: 2026, month: 5, day: 1))!
         let event = CountEvent(title: "Дата", date: CalendarDay(year: 2026, month: 4, day: 30))
