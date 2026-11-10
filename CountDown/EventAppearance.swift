@@ -9,6 +9,7 @@ extension EventPalette {
         case .ocean: colors = [Color(red: 0.18, green: 0.54, blue: 0.72), Color(red: 0.11, green: 0.27, blue: 0.52)]
         case .violet: colors = [Color(red: 0.65, green: 0.48, blue: 0.86), Color(red: 0.35, green: 0.25, blue: 0.57)]
         case .forest: colors = [Color(red: 0.30, green: 0.62, blue: 0.50), Color(red: 0.11, green: 0.37, blue: 0.39)]
+        case .sand: colors = [Color(red: 0.91, green: 0.74, blue: 0.52), Color(red: 0.64, green: 0.46, blue: 0.33)]
         }
         return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
@@ -108,6 +109,8 @@ struct EventBackground: View {
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                     .overlay(Color(rgbHex: event.maskColorHex).opacity(event.maskOpacity))
+            } else if let hex = event.backgroundColorHex {
+                Color(rgbHex: hex)
             } else {
                 event.palette.gradient
             }
@@ -176,10 +179,10 @@ struct EventCard: View {
                     .font(.system(size: 10, weight: .heavy, design: .rounded))
                     .tracking(1.8)
                 Spacer()
-                if event.showsMilestones {
-                    Image(systemName: "circle.hexagongrid")
+                if event.isPinned {
+                    Image(systemName: "pin.fill")
                         .font(.subheadline)
-                        .accessibilityLabel("Круглые даты включены")
+                        .accessibilityLabel("Закреплённое событие")
                 }
             }
             Spacer(minLength: 2)
@@ -187,10 +190,11 @@ struct EventCard: View {
                 .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
             HStack(alignment: .firstTextBaseline) {
                 Text(event.title)
-                    .font(.system(size: 20, weight: .bold, design: .serif))
+                    .font(.system(size: 20, weight: event.style.thickness.fontWeight,
+                                  design: event.style.typeface.fontDesign))
                     .lineLimit(1)
                 Spacer()
-                Text(event.date.date().formatted(.dateTime.day().month(.abbreviated)))
+                Text(event.date.displayLabel)
                     .font(.caption.weight(.medium))
                     .opacity(0.85)
             }
