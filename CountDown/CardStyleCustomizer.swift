@@ -402,69 +402,121 @@ struct CardStyleCustomizer: View {
     }
 }
 
-/// Same layout as the Home Screen widget. This is a preview, not an actual WidgetKit snapshot.
+/// Approximation of the actual WidgetKit composition for preset editing.
 struct WidgetCardPreview: View {
     let event: CountEvent
     let image: UIImage?
     let wide: Bool
+    var large: Bool = false
 
-    private var count: CountReading { DayCount.reading(for: event) }
+    private var phase: EventPhase { DayCount.phase(for: event) }
+    private var values: [CountReading] {
+        let result = DayCount.readings(for: event)
+        return !wide ? Array(result.prefix(1)) : result
+    }
+    private var scale: CGFloat { CGFloat(min(max(event.style.scale, 0.7), 1.6)) }
 
     var body: some View {
         Group {
-            if wide {
-                HStack(alignment: .center, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(count.direction.uppercased())
-                            .font(.system(size: 10, weight: .heavy, design: .rounded))
-                            .tracking(1.4)
+            if large {
+                VStack(alignment: .leading, spacing: 15) {
+                    header
+                    Spacer(minLength: 0)
+                    timeDisplay(fontSize: 55)
+                    Text(event.title)
+                        .font(.system(size: 23 * scale, weight: event.style.thickness.fontWeight,
+                                      design: event.style.typeface.fontDesign))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.5)
+                    Text(event.date.displayLabel)
+                        .font(.caption)
+                        .opacity(0.85)
+                    Divider().overlay(event.style.textColor.opacity(0.4))
+                    Text(event.note.isEmpty ? "Заметка к событию" : event.note)
+                        .font(.system(size: 13, weight: .regular))
+                        .lineLimit(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(20)
+            } else if wide {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        header
                         Text(event.title)
-                            .font(.system(size: 21, weight: event.style.thickness.fontWeight,
+                            .font(.system(size: 20 * scale, weight: event.style.thickness.fontWeight,
                                           design: event.style.typeface.fontDesign))
                             .lineLimit(2)
+                            .minimumScaleFactor(0.45)
                         Text(event.date.displayLabel)
-                            .font(.caption.weight(.medium))
-                            .opacity(0.85)
+                            .font(.caption2.weight(.medium))
+                            .lineLimit(2)
+                            .opacity(0.9)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text(count.number, format: .number)
-                            .font(.system(size: 76 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
-                                          weight: event.style.thickness.fontWeight,
-                                          design: event.style.typeface.fontDesign))
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.35)
-                            .lineLimit(1)
-                        Text(count.unitLabel)
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    timeDisplay(fontSize: values.count > 1 ? 34 : 73)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .padding(14)
+                .padding(15)
             } else {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(count.direction.uppercased())
-                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    header
                     Spacer(minLength: 0)
-                    Text(count.number, format: .number)
-                        .font(.system(size: 74 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
-                                      weight: event.style.thickness.fontWeight,
-                                      design: event.style.typeface.fontDesign))
-                        .minimumScaleFactor(0.3)
-                        .lineLimit(1)
-                        .monospacedDigit()
-                    Text(count.unitLabel).font(.caption.weight(.semibold))
+                    timeDisplay(fontSize: 76)
                     Text(event.title)
-                        .font(.system(size: 15, weight: event.style.thickness.fontWeight,
+                        .font(.system(size: 15 * scale, weight: event.style.thickness.fontWeight,
                                       design: event.style.typeface.fontDesign))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.4)
                 }
-                .padding(13)
+                .padding(14)
             }
         }
         .foregroundStyle(event.style.textColor)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { EventBackground(event: event, previewImage: image) }
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .animation(.easeInOut(duration: 0.22), value: event.style.scale)
+    }
+
+    private var header: some View {
+        Text(phase == .now ? "ЭТОТ ДЕНЬ НАСТАЛ" :
+             event.countsUp || event.date.date() < Date() ? "ПРОШЛО" : "ОСТАЛОСЬ")
+            .font(.system(size: 9, weight: .heavy, design: .rounded))
+            .tracking(1.1)
+    }
+
+    @ViewBuilder
+    private func timeDisplay(fontSize: CGFloat) -> some View {
+        if phase == .now {
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                Text("СЕЙЧАС")
+                    .font(.system(size: min(fontSize * 0.68 * scale, 53),
+                                  weight: event.style.thickness.fontWeight,
+                                  design: event.style.typeface.fontDesign))
+                    .minimumScaleFactor(0.4)
+                    .lineLimit(1)
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                ForEach(values.indices, id: \.self) { i in
+                    let reading = values[i]
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(reading.number, format: .number)
+                            .font(.system(size: fontSize * scale,
+                                          weight: event.style.thickness.fontWeight,
+                                          design: event.style.typeface.fontDesign))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.3)
+                            .lineLimit(1)
+                            .contentTransition(.numericText())
+                        Text(reading.unitLabel)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
     }
 }
