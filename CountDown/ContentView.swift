@@ -1,10 +1,39 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
+
+/// Dragging is tracked by ID rather than asynchronously reading the item provider:
+/// dropEntered can reorder immediately with a spring, while the drag preview stays visible.
+private struct CardReorderDelegate: DropDelegate {
+    let target: CountEvent
+    @Binding var draggedID: UUID?
+    let store: EventStore
+
+    func validateDrop(info: DropInfo) -> Bool {
+        guard let draggedID, draggedID != target.id,
+              let source = store.events.first(where: { $0.id == draggedID }) else { return false }
+        return source.isPinned == target.isPinned
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedID, draggedID != target.id else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+            store.move(draggedID, before: target.id)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedID = nil
+        return true
+    }
+}
 
 private enum EditorRoute: Identifiable {
-    case create
-    case edit(CountEvent)
-
+    case create, edit(CountEvent)
     var id: String {
         switch self {
         case .create: "create"
@@ -23,12 +52,17 @@ struct ContentView: View {
     @State private var editor: EditorRoute?
     @State private var selectedEvent: CountEvent?
     @State private var expandedNotes: Set<UUID> = []
+    @State private var draggedID: UUID?
+    @State private var openedPreset: WidgetPreset?
 
     private var sortedEvents: [CountEvent] {
-        store.events.enumerated().sorted { left, right in
-            if left.element.isPinned != right.element.isPinned { return left.element.isPinned }
-            return left.offset < right.offset
-        }.map(\.element)
+        store.events.enumerated()
+            .sorted {
+                $0.element.isPinned == $1.element.isPinned
+                    ? $0.offset < $1.offset
+                    : $0.element.isPinned
+            }
+            .map(\.element)
     }
 
     var body: some View {
@@ -71,94 +105,119 @@ struct ContentView: View {
                             .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
-                        List {
-                            ForEach(sortedEvents) { event in
-                                VStack(spacing: 0) {
-                                    Button {
-                                        if event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    List {
+                        ForEach(sortedEvents) { event in
+                            VStack(spacing: -19) {
+                                Button {
+                                    guard !event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                                        selectedEvent = event
+                                        return
+                                    }
+                                    withAnimation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.88)) {
+                                        if !expandedNotes.insert(event.id).inserted {
+                                            expandedNotes.remove(event.id)
+                                        }
+                                    }
+                                } label: {
+                                    TimelineView(.periodic(from: .now, by: 15)) { clock in
+                                        EventCard(event: event, now: clock.date)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .zIndex(1)
+
+                                if expandedNotes.contains(event.id) && !event.note.isEmpty {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        ScrollView(.vertical) {
+                                            Text(event.note)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .font(.body)
+                                                .textSelection(.enabled)
+                                        }
+                                        .frame(maxHeight: 155)
+                                        Button {
                                             selectedEvent = event
-                                        } else {
-                                            if expandedNotes.contains(event.id) {
-                                                expandedNotes.remove(event.id)
-                                            } else {
-                                                expandedNotes.insert(event.id)
-                                            }
+                                        } label: {
+                                            Label("Открыть событие", systemImage: "arrow.up.right")
+                                                .font(.caption.weight(.semibold))
                                         }
-                                    } label: {
-                                        EventCard(event: event, now: context.date)
                                     }
-                                    .buttonStyle(.plain)
-                                    if expandedNotes.contains(event.id) && !event.note.isEmpty {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            ScrollView(.vertical) {
-                                                Text(event.note)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                                    .font(.body)
-                                                    .textSelection(.enabled)
-                                            }
-                                            .frame(maxHeight: 160)
-                                            Button {
-                                                selectedEvent = event
-                                            } label: {
-                                                Label("Открыть событие", systemImage: "arrow.up.right")
-                                                    .font(.caption.weight(.semibold))
-                                            }
-                                        }
-                                        .padding(16)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(Color(uiColor: .secondarySystemGroupedBackground),
-                                                    in: UnevenRoundedRectangle(bottomLeadingRadius: 20, bottomTrailingRadius: 20))
-                                        .padding(.horizontal, 5)
-                                        .transition(.opacity.combined(with: .move(edge: .top)))
-                                    }
-                                }
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                                .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button {
-                                        store.togglePin(event)
-                                    } label: {
-                                        Label(event.isPinned ? "Открепить" : "Закрепить",
-                                              systemImage: event.isPinned ? "pin.slash" : "pin")
-                                    }
-                                    .tint(.orange)
-                                    Button { editor = .edit(event) } label: {
-                                        Label("Изменить", systemImage: "pencil")
-                                    }
-                                    .tint(.indigo)
-                                    Button(role: .destructive) {
-                                        store.remove(event)
-                                        expandedNotes.remove(event.id)
-                                    } label: {
-                                        Label("Удалить", systemImage: "trash")
-                                    }
-                                }
-                                .draggable(event.id.uuidString)
-                                .dropDestination(for: String.self) { items, _ in
-                                    guard let id = items.first.flatMap(UUID.init(uuidString:)) else { return false }
-                                    store.move(id, before: event.id)
-                                    return true
+                                    .padding(.horizontal, 20)
+                                    .padding(.top, 32)
+                                    .padding(.bottom, 15)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color(uiColor: .secondarySystemGroupedBackground))
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
                                 }
                             }
+                            .background(Color(uiColor: .secondarySystemGroupedBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
+                                    withAnimation(.spring(response: 0.48, dampingFraction: 0.87)) {
+                                        store.togglePin(event)
+                                    }
+                                } label: {
+                                    Label(event.isPinned ? "Открепить" : "Закрепить",
+                                          systemImage: event.isPinned ? "pin.slash" : "pin")
+                                }
+                                .tint(.orange)
+
+                                Button { editor = .edit(event) } label: {
+                                    Label("Изменить", systemImage: "pencil")
+                                }
+                                .tint(.indigo)
+
+                                Button(role: .destructive) {
+                                    withAnimation {
+                                        store.remove(event)
+                                        expandedNotes.remove(event.id)
+                                    }
+                                } label: {
+                                    Label("Удалить", systemImage: "trash")
+                                }
+                            }
+                            .onDrag {
+                                draggedID = event.id
+                                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                                return NSItemProvider(object: event.id.uuidString as NSString)
+                            }
+                            .onDrop(of: [UTType.plainText],
+                                    delegate: CardReorderDelegate(target: event,
+                                                                  draggedID: $draggedID,
+                                                                  store: store))
                         }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
-                        .animation(reduceMotion ? nil : .smooth, value: store.events)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.87),
+                               value: sortedEvents.map(\.id))
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $editor) { route in
-                EventEditor(event: route.event)
-                    .environmentObject(store)
+                EventEditor(event: route.event).environmentObject(store)
             }
             .sheet(item: $selectedEvent) { event in
                 NavigationStack {
                     EventDetail(event: store.events.first(where: { $0.id == event.id }) ?? event)
                 }
+            }
+            .sheet(item: $openedPreset) { preset in
+                if let event = store.events.first(where: { $0.id == preset.eventID }) {
+                    WidgetPresetEditor(event: event, existing: preset)
+                        .environmentObject(store)
+                }
+            }
+            .onOpenURL { url in
+                guard url.scheme == "dni", url.host == "widget",
+                      let id = UUID(uuidString: url.lastPathComponent),
+                      let preset = store.widgetPresets.first(where: { $0.id == id }) else { return }
+                openedPreset = preset
             }
         }
     }
