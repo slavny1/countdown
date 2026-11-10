@@ -124,7 +124,7 @@ struct EventNumber: View {
     var style: CardStyle = CardStyle()
 
     private var numberSize: CGFloat {
-        (large ? (reading.isFuture ? 72 : 86) : 62) * CGFloat(min(max(style.scale, 0.75), 1.45))
+        (large ? (reading.isFuture ? 72 : 86) : 62) * CGFloat(min(max(style.scale, 0.7), 1.6))
     }
 
     var body: some View {
@@ -190,7 +190,8 @@ struct EventCard: View {
                 .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
             HStack(alignment: .firstTextBaseline) {
                 Text(event.title)
-                    .font(.system(size: 20, weight: event.style.thickness.fontWeight,
+                    .font(.system(size: 20 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
+                                  weight: event.style.thickness.fontWeight,
                                   design: event.style.typeface.fontDesign))
                     .lineLimit(1)
                 Spacer()
