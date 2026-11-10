@@ -105,6 +105,7 @@ struct EventDetail: View {
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
                     }
                 }
+                .padding(20)
                 if liveEvent.countsUp {
                     Button {
                         restart()
@@ -115,9 +116,9 @@ struct EventDetail: View {
                     }
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 22)
                 }
-                .padding(20)
             }
         }
         .navigationTitle("Событие")
