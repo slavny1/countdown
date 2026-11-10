@@ -134,6 +134,7 @@ struct WidgetPresetEditor: View {
     @State private var draft: WidgetPreset
     @State private var chosenColor = Color.white
     @State private var chosenBackground = Color.white
+    @State private var chosenMask = Color.black
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var pendingPhoto: UIImage?
     @State private var photoError = false
@@ -251,6 +252,10 @@ struct WidgetPresetEditor: View {
                         }
                     Button("Вернуть градиент") { draft.backgroundColorHex = nil }
                     if photo != nil {
+                        ColorPicker("Цвет маски", selection: $chosenMask, supportsOpacity: false)
+                            .onChange(of: chosenMask) { _, value in
+                                draft.maskColorHex = value.rgbHex
+                            }
                         HStack {
                             Text("Затемнение")
                             Slider(value: $draft.maskOpacity, in: 0...0.9)
@@ -281,6 +286,7 @@ struct WidgetPresetEditor: View {
             .onAppear {
                 chosenColor = Color(rgbHex: draft.style.textColorHex)
                 chosenBackground = Color(rgbHex: draft.backgroundColorHex ?? "F0E3D1")
+                chosenMask = Color(rgbHex: draft.maskColorHex)
             }
             .onChange(of: pickedPhoto) { _, item in
                 guard let item else { return }
