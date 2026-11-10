@@ -6,7 +6,6 @@ struct EventDetail: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: EventStore
     @State private var showingSettings = false
-    @State private var previewWide = true
 
     private var currentEvent: CountEvent {
         store.events.first(where: { $0.id == event.id }) ?? event
@@ -37,7 +36,8 @@ struct EventDetail: View {
                         EventNumber(reading: reading, large: true, style: liveEvent.style)
                             .frame(maxWidth: .infinity, alignment: liveEvent.style.swiftUIAlignment)
                         Text(liveEvent.title)
-                            .font(.system(size: 32, weight: liveEvent.style.thickness.fontWeight,
+                            .font(.system(size: 32 * CGFloat(min(max(liveEvent.style.scale, 0.7), 1.6)),
+                                          weight: liveEvent.style.thickness.fontWeight,
                                           design: liveEvent.style.typeface.fontDesign))
                         Text(liveEvent.date.displayLabel)
                             .font(.subheadline.weight(.medium))
@@ -77,16 +77,17 @@ struct EventDetail: View {
                             }
                             .accessibilityLabel("Настроить виджеты")
                         }
-                        Picker("Размер", selection: $previewWide) {
-                            Text("Малый").tag(false)
-                            Text("Широкий").tag(true)
+                        HStack {
+                            WidgetCardPreview(event: liveEvent,
+                                              image: EventPhotoStore.image(named: liveEvent.photoFilename),
+                                              wide: false)
+                                .frame(width: 172, height: 172)
+                            Spacer()
                         }
-                        .pickerStyle(.segmented)
                         WidgetCardPreview(event: liveEvent,
                                           image: EventPhotoStore.image(named: liveEvent.photoFilename),
-                                          wide: previewWide)
-                            .frame(maxWidth: previewWide ? .infinity : 190)
-                            .frame(height: 170)
+                                          wide: true)
+                            .frame(height: 172)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
