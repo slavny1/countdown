@@ -28,9 +28,10 @@ final class EventStore: ObservableObject {
               let source = events.firstIndex(where: { $0.id == draggedID }),
               let target = events.firstIndex(where: { $0.id == targetID }),
               events[source].isPinned == events[target].isPinned else { return }
+        let movingDown = source < target
         let moved = events.remove(at: source)
         guard let destination = events.firstIndex(where: { $0.id == targetID }) else { return }
-        events.insert(moved, at: destination)
+        events.insert(moved, at: movingDown ? destination + 1 : destination)
         persist()
     }
 
