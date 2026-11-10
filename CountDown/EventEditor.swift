@@ -17,6 +17,7 @@ struct EventEditor: View {
     @State private var symbol: String
     @State private var mask: PhotoMask
     @State private var maskColorHex: String
+    @State private var backgroundColorHex: String?
     @State private var photoZoom: Double
     @State private var photoFocusX: Double
     @State private var photoFocusY: Double
@@ -44,6 +45,7 @@ struct EventEditor: View {
         _symbol = State(initialValue: event?.symbol ?? "sparkles")
         _mask = State(initialValue: event?.mask ?? .black)
         _maskColorHex = State(initialValue: event?.maskColorHex ?? "000000")
+        _backgroundColorHex = State(initialValue: event?.backgroundColorHex)
         _photoZoom = State(initialValue: event?.photoZoom ?? 1)
         _photoFocusX = State(initialValue: event?.photoFocusX ?? 0.5)
         _photoFocusY = State(initialValue: event?.photoFocusY ?? 0.5)
@@ -71,6 +73,7 @@ struct EventEditor: View {
                    mask: mask, maskOpacity: maskOpacity,
                    maskColorHex: maskColorHex, photoZoom: photoZoom,
                    photoFocusX: photoFocusX, photoFocusY: photoFocusY,
+                   backgroundColorHex: backgroundColorHex,
                    style: style, countsUp: countsUp)
     }
 
@@ -81,28 +84,17 @@ struct EventEditor: View {
                     TextField("Название события", text: $title)
                         .textInputAutocapitalization(.sentences)
                         .accessibilityIdentifier("eventTitle")
-                    DatePicker("Дата", selection: $selectedDate, displayedComponents: .date)
-                        .accessibilityIdentifier("eventDate")
-                    HStack {
-                        Spacer()
-                        Button {
+                    HStack(spacing: 12) {
+                        DatePicker("Дата", selection: $selectedDate, displayedComponents: .date)
+                            .accessibilityIdentifier("eventDate")
+                        Button("Сейчас") {
                             selectedDate = .now
                             includesTime = true
-                        } label: {
-                            Label("Сейчас", systemImage: "clock.arrow.circlepath")
                         }
-                        .buttonStyle(.bordered)
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityIdentifier("setNow")
                     }
                     Toggle("Считать время с этой даты", isOn: $countsUp)
-                    if countsUp {
-                        Button {
-                            selectedDate = .now
-                            includesTime = true
-                        } label: {
-                            Label("Начать заново с текущего момента", systemImage: "arrow.counterclockwise")
-                        }
-                        .accessibilityIdentifier("restartCounter")
-                    }
                     Toggle("Указать время", isOn: $includesTime)
                     if includesTime {
                         DatePicker("Время", selection: $selectedDate, displayedComponents: .hourAndMinute)
@@ -127,8 +119,7 @@ struct EventEditor: View {
                         showCustomizer = true
                     } label: {
                         HStack {
-                            Label("Открыть редактор карточки и виджетов",
-                                  systemImage: "slider.horizontal.3")
+                            Label("Оформление", systemImage: "slider.horizontal.3")
                             Spacer()
                             Image(systemName: "chevron.right")
                         }
@@ -174,6 +165,7 @@ struct EventEditor: View {
 
             .sheet(isPresented: $showCustomizer) {
                 CardStyleCustomizer(style: $style, palette: $palette,
+                                    backgroundColorHex: $backgroundColorHex,
                                     maskColorHex: $maskColorHex, maskOpacity: $maskOpacity,
                                     photoZoom: $photoZoom, photoFocusX: $photoFocusX,
                                     photoFocusY: $photoFocusY,
@@ -211,6 +203,7 @@ struct EventEditor: View {
             mask: mask, maskOpacity: maskOpacity,
             maskColorHex: maskColorHex, photoZoom: photoZoom,
             photoFocusX: photoFocusX, photoFocusY: photoFocusY,
+            backgroundColorHex: backgroundColorHex,
             style: style, countsUp: countsUp
         )
         if existingEvent == nil { store.add(event) }
