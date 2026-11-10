@@ -12,6 +12,7 @@ struct EventEditor: View {
     @State private var includesTime: Bool
     @State private var note: String
     @State private var unit: CountUnit
+    @State private var displayUnits: TimeUnitSelection
     @State private var showsMilestones: Bool
     @State private var palette: EventPalette
     @State private var symbol: String
@@ -40,6 +41,7 @@ struct EventEditor: View {
         _includesTime = State(initialValue: event?.date.includesTime ?? false)
         _note = State(initialValue: event?.note ?? "")
         _unit = State(initialValue: event?.unit ?? .automatic)
+        _displayUnits = State(initialValue: event?.displayUnits ?? .fromLegacy(event?.unit ?? .automatic))
         _showsMilestones = State(initialValue: event?.showsMilestones ?? true)
         _palette = State(initialValue: event?.palette ?? .coral)
         _symbol = State(initialValue: event?.symbol ?? "sparkles")
@@ -74,7 +76,8 @@ struct EventEditor: View {
                    maskColorHex: maskColorHex, photoZoom: photoZoom,
                    photoFocusX: photoFocusX, photoFocusY: photoFocusY,
                    backgroundColorHex: backgroundColorHex,
-                   style: style, countsUp: countsUp)
+                   isPinned: existingEvent?.isPinned ?? false,
+                   style: style, countsUp: countsUp, displayUnits: displayUnits)
     }
 
     var body: some View {
@@ -83,7 +86,14 @@ struct EventEditor: View {
                 Section("Событие") {
                     TextField("Название события", text: $title)
                         .textInputAutocapitalization(.sentences)
+                        .onChange(of: title) { _, next in
+                            if next.count > 70 { title = String(next.prefix(70)) }
+                        }
                         .accessibilityIdentifier("eventTitle")
+                    Text("\(title.count)/70")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     HStack(spacing: 12) {
                         DatePicker("Дата", selection: $selectedDate, displayedComponents: .date)
                             .accessibilityIdentifier("eventDate")
@@ -101,17 +111,34 @@ struct EventEditor: View {
                     }
                     TextField("Заметка (необязательно)", text: $note, axis: .vertical)
                         .lineLimit(3...7)
+                        .onChange(of: note) { _, next in
+                            if next.count > 300 { note = String(next.prefix(300)) }
+                        }
+                    Text("\(note.count)/300")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
 
-                Section {
-                    Picker("Что показывать", selection: $unit) {
-                        ForEach(CountUnit.allCases) { choice in
-                            Text(choice.title).tag(choice)
-                        }
+                Section("Что показывать") {
+                    Toggle("Автоматически", isOn: $displayUnits.automatic)
+                    if !displayUnits.automatic {
+                        Toggle("Дни", isOn: Binding(
+                            get: { displayUnits.days },
+                            set: { displayUnits.select(.days, enabled: $0) }
+                        ))
+                        Toggle("Часы", isOn: Binding(
+                            get: { displayUnits.hours },
+                            set: { displayUnits.select(.hours, enabled: $0) }
+                        ))
+                        Toggle("Минуты", isOn: Binding(
+                            get: { displayUnits.minutes },
+                            set: { displayUnits.select(.minutes, enabled: $0) }
+                        ))
                     }
                     Toggle("Круглые даты", isOn: $showsMilestones)
                 } footer: {
-                    Text("Автоматически: дни → часы за 24 часа → минуты за час до события. После события — дни. Круглые даты: 1, 7, 10, 30, 50, 100, 200 дней; месяц, полгода, год и юбилеи.")
+                    Text("В автоматическом режиме дни сменяются часами и минутами. При выборе нескольких единиц показывается составное время.")
                 }
 
                 Section("Оформление и фото") {
@@ -204,7 +231,8 @@ struct EventEditor: View {
             maskColorHex: maskColorHex, photoZoom: photoZoom,
             photoFocusX: photoFocusX, photoFocusY: photoFocusY,
             backgroundColorHex: backgroundColorHex,
-            style: style, countsUp: countsUp
+            isPinned: existingEvent?.isPinned ?? false,
+            style: style, countsUp: countsUp, displayUnits: displayUnits
         )
         if existingEvent == nil { store.add(event) }
         else { store.update(event) }
