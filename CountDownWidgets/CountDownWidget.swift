@@ -314,7 +314,8 @@ struct WidgetPresetQuery: EntityQuery {
         SharedData.presets().map { WidgetPresetOption(id: $0.id.uuidString, title: $0.title) }
     }
     func defaultResult() async -> WidgetPresetOption? {
-        SharedData.presets().first.map { WidgetPresetOption(id: $0.id.uuidString, title: $0.title) }
+        // Keep the preset optional until the user explicitly picks one.
+        nil
     }
 }
 
