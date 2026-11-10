@@ -92,6 +92,7 @@ private struct WidgetEvent: Decodable {
     let title: String
     let date: WidgetDay
     let palette: String
+    let backgroundColorHex: String?
     let symbol: String
     let unit: String?
     let photoFilename: String?
@@ -143,8 +144,23 @@ private struct WidgetEvent: Decodable {
         case "ocean": [Color(red: 0.18, green: 0.54, blue: 0.72), Color(red: 0.11, green: 0.27, blue: 0.52)]
         case "violet": [Color(red: 0.65, green: 0.48, blue: 0.86), Color(red: 0.35, green: 0.25, blue: 0.57)]
         case "forest": [Color(red: 0.30, green: 0.62, blue: 0.50), Color(red: 0.11, green: 0.37, blue: 0.39)]
+        case "sand": [Color(red: 0.91, green: 0.74, blue: 0.52), Color(red: 0.64, green: 0.46, blue: 0.33)]
         default: [Color(red: 0.94, green: 0.45, blue: 0.36), Color(red: 0.64, green: 0.23, blue: 0.43)]
         }
+    }
+
+    var backgroundColor: Color? {
+        guard let backgroundColorHex,
+              let rgb = UInt64(backgroundColorHex, radix: 16) else { return nil }
+        return Color(.sRGB, red: Double((rgb >> 16) & 255) / 255,
+                     green: Double((rgb >> 8) & 255) / 255,
+                     blue: Double(rgb & 255) / 255, opacity: 1)
+    }
+
+    var dateLabel: String {
+        let value = date.date()
+        let result = value.formatted(.dateTime.day().month(.wide).year())
+        return date.hour == nil ? result : result + " · " + value.formatted(.dateTime.hour().minute())
     }
 
     var maskColor: Color {
@@ -325,6 +341,8 @@ private struct WidgetBackground: View {
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                     .overlay(event.maskColor.opacity(min(max(event.maskOpacity ?? 0.55, 0), 0.9)))
+            } else if let color = event?.backgroundColor {
+                color
             } else {
                 LinearGradient(colors: event?.colors ?? [.indigo, .purple],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -341,7 +359,7 @@ private struct CountWidgetFace: View {
     private var style: WidgetCardStyle { entry.event?.style ?? .standard }
 
     private var numberSize: CGFloat {
-        (family == .systemMedium ? 112 : 91) * CGFloat(min(max(style.scale, 0.75), 1.45))
+        (family == .systemMedium ? 112 : 91) * CGFloat(min(max(style.scale, 0.7), 1.6))
     }
 
     private var numberText: some View {
@@ -398,10 +416,10 @@ private struct CountWidgetFace: View {
                             .font(.system(size: 10, weight: .heavy, design: .rounded))
                             .tracking(1.4)
                         Text(entry.event?.title ?? "Создай событие")
-                            .font(.system(size: 21, weight: .bold, design: style.design))
+                            .font(.system(size: 21, weight: style.weight, design: style.design))
                             .lineLimit(2)
-                        if let date = entry.event?.date.date() {
-                            Text(date.formatted(.dateTime.day().month(.wide)))
+                        if let dateLabel = entry.event?.dateLabel {
+                            Text(dateLabel)
                                 .font(.caption.weight(.medium))
                                 .opacity(0.85)
                         }
@@ -409,7 +427,7 @@ private struct CountWidgetFace: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     VStack(alignment: .trailing, spacing: 0) {
                         Text(entry.reading.number, format: .number)
-                            .font(.system(size: 76 * CGFloat(min(max(style.scale, 0.75), 1.45)),
+                            .font(.system(size: 76 * CGFloat(min(max(style.scale, 0.7), 1.6)),
                                           weight: style.weight, design: style.design))
                             .monospacedDigit()
                             .lineLimit(1)
@@ -428,7 +446,7 @@ private struct CountWidgetFace: View {
                         .tracking(1)
                     Spacer(minLength: 0)
                     Text(entry.reading.number, format: .number)
-                        .font(.system(size: 74 * CGFloat(min(max(style.scale, 0.75), 1.45)),
+                        .font(.system(size: 74 * CGFloat(min(max(style.scale, 0.7), 1.6)),
                                       weight: style.weight, design: style.design))
                         .monospacedDigit()
                         .lineLimit(1)
@@ -437,7 +455,7 @@ private struct CountWidgetFace: View {
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                     Text(entry.event?.title ?? "Создай событие")
-                        .font(.system(size: 15, weight: .bold, design: style.design))
+                        .font(.system(size: 15, weight: style.weight, design: style.design))
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: style.centered ? .center : .leading)
