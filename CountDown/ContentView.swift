@@ -70,6 +70,7 @@ struct ContentView: View {
     @State private var draggedID: UUID?
     @State private var dropTargetID: UUID?
     @State private var openedPreset: WidgetPreset?
+    @State private var openedWidgetEvent: CountEvent?
     @AppStorage("days.celebrations.dismissed") private var dismissedCelebrations = ""
 
     private func celebrationKey(for event: CountEvent) -> String {
@@ -263,6 +264,10 @@ struct ContentView: View {
                         .environmentObject(store)
                 }
             }
+            .sheet(item: $openedWidgetEvent) { event in
+                WidgetGallery(eventID: event.id)
+                    .environmentObject(store)
+            }
             .overlay {
                 TimelineView(.periodic(from: .now, by: 1)) { clock in
                     if let event = sortedEvents.first(where: { canCelebrate($0, at: clock.date) }) {
@@ -273,10 +278,15 @@ struct ContentView: View {
                 }
             }
             .onOpenURL { url in
-                guard url.scheme == "dni", url.host == "widget",
-                      let id = UUID(uuidString: url.lastPathComponent),
-                      let preset = store.widgetPresets.first(where: { $0.id == id }) else { return }
-                openedPreset = preset
+                guard url.scheme == "dni",
+                      let id = UUID(uuidString: url.lastPathComponent) else { return }
+                if url.host == "widget",
+                   let preset = store.widgetPresets.first(where: { $0.id == id }) {
+                    openedPreset = preset
+                } else if url.host == "event",
+                          let event = store.events.first(where: { $0.id == id }) {
+                    openedWidgetEvent = event
+                }
             }
         }
     }
