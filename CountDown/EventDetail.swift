@@ -37,8 +37,9 @@ struct EventDetail: View {
                         EventNumber(reading: reading, large: true, style: liveEvent.style)
                             .frame(maxWidth: .infinity, alignment: liveEvent.style.swiftUIAlignment)
                         Text(liveEvent.title)
-                            .font(.system(size: 32, weight: .bold, design: .serif))
-                        Text(liveEvent.date.date().formatted(.dateTime.day().month(.wide).year()))
+                            .font(.system(size: 32, weight: liveEvent.style.thickness.fontWeight,
+                                          design: liveEvent.style.typeface.fontDesign))
+                        Text(liveEvent.date.displayLabel)
                             .font(.subheadline.weight(.medium))
                     }
                     .foregroundStyle(liveEvent.style.textColor)
@@ -63,11 +64,18 @@ struct EventDetail: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Предпросмотр виджета")
+                            Text("Виджеты")
                                 .font(.title2.bold())
                             Spacer()
-                            Button("Настроить") { showingSettings = true }
-                                .font(.subheadline)
+                            Button {
+                                showingSettings = true
+                            } label: {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.title3)
+                                    .frame(width: 38, height: 38)
+                                    .background(.thinMaterial, in: Circle())
+                            }
+                            .accessibilityLabel("Настроить виджеты")
                         }
                         Picker("Размер", selection: $previewWide) {
                             Text("Малый").tag(false)
@@ -96,6 +104,18 @@ struct EventDetail: View {
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
                     }
                 }
+                if liveEvent.countsUp {
+                    Button {
+                        restart()
+                    } label: {
+                        Label("Обнулить счётчик", systemImage: "arrow.counterclockwise")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 12)
+                }
                 .padding(20)
             }
         }
@@ -109,20 +129,6 @@ struct EventDetail: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Готово") { dismiss() }
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            if currentEvent.countsUp {
-                Button {
-                    restart()
-                } label: {
-                    Label("Начать заново с текущего момента", systemImage: "arrow.counterclockwise")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(.regularMaterial)
             }
         }
         .sheet(isPresented: $showingSettings) {
