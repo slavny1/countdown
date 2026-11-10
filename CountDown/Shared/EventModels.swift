@@ -73,6 +73,59 @@ enum CountUnit: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Time components requested for the card. Automatic preserves the classic
+/// days → hours → minutes behavior until the user chooses explicit units.
+struct TimeUnitSelection: Codable, Hashable {
+    var automatic: Bool = true
+    var days: Bool = true
+    var hours: Bool = false
+    var minutes: Bool = false
+
+    init(automatic: Bool = true, days: Bool = true,
+         hours: Bool = false, minutes: Bool = false) {
+        self.automatic = automatic
+        self.days = days
+        self.hours = hours
+        self.minutes = minutes
+    }
+
+    var selected: [CountUnit] {
+        let units: [CountUnit] = [.days, .hours, .minutes]
+        return units.filter {
+            switch $0 {
+            case .days: days
+            case .hours: hours
+            case .minutes: minutes
+            case .automatic: false
+            }
+        }
+    }
+
+    mutating func select(_ unit: CountUnit, enabled: Bool) {
+        automatic = false
+        switch unit {
+        case .days: days = enabled
+        case .hours: hours = enabled
+        case .minutes: minutes = enabled
+        case .automatic: automatic = enabled
+        }
+        if selected.isEmpty { days = true }
+    }
+
+    static func fromLegacy(_ unit: CountUnit) -> Self {
+        switch unit {
+        case .automatic: Self()
+        case .days: Self(automatic: false, days: true)
+        case .hours: Self(automatic: false, days: false, hours: true)
+        case .minutes: Self(automatic: false, days: false, minutes: true)
+        }
+    }
+}
+
+enum EventPhase: String, Equatable {
+    case waiting, now, elapsed
+}
+
 enum PhotoMask: String, Codable, CaseIterable, Identifiable {
     case black, navy, plum, brown
     var id: String { rawValue }
@@ -172,6 +225,7 @@ struct CountEvent: Identifiable, Codable, Hashable {
     var isPinned: Bool
     var style: CardStyle
     var countsUp: Bool
+    var displayUnits: TimeUnitSelection
 
     init(id: UUID = UUID(), title: String, date: CalendarDay,
          palette: EventPalette = .coral, symbol: String = "sparkles",
@@ -181,7 +235,8 @@ struct CountEvent: Identifiable, Codable, Hashable {
          maskColorHex: String? = nil, photoZoom: Double = 1,
          photoFocusX: Double = 0.5, photoFocusY: Double = 0.5,
          backgroundColorHex: String? = nil, isPinned: Bool = false,
-         style: CardStyle = CardStyle(), countsUp: Bool = false) {
+         style: CardStyle = CardStyle(), countsUp: Bool = false,
+         displayUnits: TimeUnitSelection? = nil) {
         self.id = id
         self.title = title
         self.date = date
@@ -201,12 +256,13 @@ struct CountEvent: Identifiable, Codable, Hashable {
         self.isPinned = isPinned
         self.style = style
         self.countsUp = countsUp
+        self.displayUnits = displayUnits ?? .fromLegacy(unit)
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, date, palette, symbol, note, unit
         case showsMilestones, photoFilename, mask, maskOpacity, maskColorHex
-        case photoZoom, photoFocusX, photoFocusY, backgroundColorHex, isPinned, style, countsUp
+        case photoZoom, photoFocusX, photoFocusY, backgroundColorHex, isPinned, style, countsUp, displayUnits
     }
 
     // Older events only contain id, title, date, palette, and symbol.
@@ -231,6 +287,7 @@ struct CountEvent: Identifiable, Codable, Hashable {
         isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         style = try c.decodeIfPresent(CardStyle.self, forKey: .style) ?? CardStyle()
         countsUp = try c.decodeIfPresent(Bool.self, forKey: .countsUp) ?? false
+        displayUnits = try c.decodeIfPresent(TimeUnitSelection.self, forKey: .displayUnits) ?? .fromLegacy(unit)
     }
 }
 
@@ -293,6 +350,64 @@ enum DayCount {
             number = Int(future ? ceil(seconds / 60) : floor(seconds / 60))
         }
         return CountReading(number: number, unit: chosen, isFuture: future)
+    }
+
+    static func phase(for event: CountEvent, now: Date = .now,
+                      calendar: Calendar = .current) -> EventPhase {
+        if event.countsUp { return .elapsed }
+        let target = event.date.date(in: calendar)
+        if calendar.isDate(now, inSameDayAs: target), now >= target {
+            return .now
+        }
+        return now < target ? .waiting : .elapsed
+    }
+
+    static func readings(for event: CountEvent, now: Date = .now,
+                         calendar: Calendar = .current,
+                         selection override: TimeUnitSelection? = nil) -> [CountReading] {
+        if phase(for: event, now: now, calendar: calendar) == .now { return [] }
+        let selected = override ?? event.displayUnits
+        if selected.automatic {
+            return [reading(for: event, now: now, calendar: calendar)]
+        }
+        let target = event.date.date(in: calendar)
+        let isFuture = !event.countsUp && target > now
+        let from = isFuture ? now : min(now, target)
+        let to = isFuture ? target : max(now, target)
+        let seconds = max(0, to.timeIntervalSince(from))
+        let totalMinutes = Int(isFuture ? ceil(seconds / 60) : floor(seconds / 60))
+        let totalHours = Int(isFuture ? ceil(seconds / 3600) : floor(seconds / 3600))
+        let calendarDays = abs(signedDays(to: event.date, from: now, calendar: calendar))
+        let split = calendar.dateComponents([.day, .hour, .minute], from: from, to: to)
+        let splitDays = max(0, split.day ?? 0)
+        let splitHours = max(0, split.hour ?? 0)
+        let splitMinutes = max(0, split.minute ?? 0)
+        let units = selected.selected.isEmpty ? [.days] : selected.selected
+
+        // When showing several units, each smaller component is the remainder
+        // of the larger one. Single-unit counters show the full total.
+        return units.map { unit in
+            let number: Int
+            switch unit {
+            case .days, .automatic:
+                number = units.count == 1 ? calendarDays : splitDays
+            case .hours:
+                if selected.days {
+                    number = splitHours
+                } else {
+                    number = units.count == 1 ? totalHours : totalMinutes / 60
+                }
+            case .minutes:
+                if selected.days {
+                    number = splitHours * (selected.hours ? 0 : 60) + splitMinutes
+                } else if selected.hours {
+                    number = totalMinutes % 60
+                } else {
+                    number = totalMinutes
+                }
+            }
+            return CountReading(number: number, unit: unit, isFuture: isFuture)
+        }
     }
 
     static func status(_ days: Int) -> String {
