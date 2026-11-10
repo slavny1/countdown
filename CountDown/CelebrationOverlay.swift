@@ -69,6 +69,5 @@ struct CelebrationOverlay: View {
             .onTapGesture(perform: onDismiss)
         }
         .transition(.opacity)
-        .accessibilityAddTraits(.isModal)
     }
 }
