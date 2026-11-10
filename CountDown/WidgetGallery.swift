@@ -322,6 +322,11 @@ struct WidgetPresetEditor: View {
             }
             .onAppear {
                 textColors = UserDefaults.standard.stringArray(forKey: "days.customTextColors") ?? []
+                if !basicText.contains(draft.style.textColorHex) &&
+                    !textColors.contains(draft.style.textColorHex) {
+                    textColors.append(draft.style.textColorHex)
+                    UserDefaults.standard.set(textColors, forKey: "days.customTextColors")
+                }
                 backgroundColors = UserDefaults.standard.stringArray(forKey: "days.customBackgrounds") ?? []
                 maskColors = UserDefaults.standard.stringArray(forKey: "days.customMasks") ?? []
                 if existing == nil { chooseContrast() }
