@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 private struct CardReorderDelegate: DropDelegate {
     let target: CountEvent
     @Binding var draggedID: UUID?
+    @Binding var dropTargetID: UUID?
     let store: EventStore
 
     func validateDrop(info: DropInfo) -> Bool {
@@ -16,10 +17,14 @@ private struct CardReorderDelegate: DropDelegate {
     }
 
     func dropEntered(info: DropInfo) {
-        guard let draggedID, draggedID != target.id else { return }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
-            store.move(draggedID, before: target.id)
+        guard validateDrop(info: info) else { return }
+        withAnimation(.easeInOut(duration: 0.12)) {
+            dropTargetID = target.id
         }
+    }
+
+    func dropExited(info: DropInfo) {
+        if dropTargetID == target.id { dropTargetID = nil }
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
@@ -27,7 +32,17 @@ private struct CardReorderDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggedID = nil
+        guard validateDrop(info: info), let draggedID else {
+            self.draggedID = nil
+            dropTargetID = nil
+            return false
+        }
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.88)) {
+            store.move(draggedID, before: target.id)
+            dropTargetID = nil
+        }
+        self.draggedID = nil
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         return true
     }
 }
@@ -53,6 +68,7 @@ struct ContentView: View {
     @State private var selectedEvent: CountEvent?
     @State private var expandedNotes: Set<UUID> = []
     @State private var draggedID: UUID?
+    @State private var dropTargetID: UUID?
     @State private var openedPreset: WidgetPreset?
     @AppStorage("days.celebrations.dismissed") private var dismissedCelebrations = ""
 
@@ -141,6 +157,11 @@ struct ContentView: View {
                                     }
                                 }
                                 .buttonStyle(.plain)
+                                .onDrag {
+                                    draggedID = event.id
+                                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                                    return NSItemProvider(object: event.id.uuidString as NSString)
+                                }
                                 .zIndex(1)
 
                                 if expandedNotes.contains(event.id) && !event.note.isEmpty {
@@ -174,8 +195,13 @@ struct ContentView: View {
                             .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
-                                    withAnimation(.spring(response: 0.48, dampingFraction: 0.87)) {
-                                        store.togglePin(event)
+                                    // Let iOS close the swipe-action surface first;
+                                    // relocating its row in the same frame causes a visual blink.
+                                    Task { @MainActor in
+                                        try? await Task.sleep(for: .milliseconds(240))
+                                        withAnimation(.spring(response: 0.52, dampingFraction: 0.88)) {
+                                            store.togglePin(event)
+                                        }
                                     }
                                 } label: {
                                     Label(event.isPinned ? "Открепить" : "Закрепить",
@@ -197,14 +223,21 @@ struct ContentView: View {
                                     Label("Удалить", systemImage: "trash")
                                 }
                             }
-                            .onDrag {
-                                draggedID = event.id
-                                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-                                return NSItemProvider(object: event.id.uuidString as NSString)
+                            .overlay(alignment: .top) {
+                                if dropTargetID == event.id {
+                                    Capsule()
+                                        .fill(Color.accentColor)
+                                        .frame(height: 5)
+                                        .padding(.horizontal, 16)
+                                        .offset(y: -7)
+                                        .shadow(color: Color.accentColor.opacity(0.35), radius: 5)
+                                        .allowsHitTesting(false)
+                                }
                             }
                             .onDrop(of: [UTType.plainText],
                                     delegate: CardReorderDelegate(target: event,
                                                                   draggedID: $draggedID,
+                                                                  dropTargetID: $dropTargetID,
                                                                   store: store))
                         }
                     }
