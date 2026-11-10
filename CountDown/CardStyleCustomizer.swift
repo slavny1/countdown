@@ -339,6 +339,8 @@ struct CardStyleCustomizer: View {
                     pendingImage = nil
                     selectedPhoto = nil
                     removePhoto = true
+                    // Removing the image returns to the event's gradient.
+                    backgroundColorHex = nil
                 }
                 .font(.subheadline)
                 HStack {
