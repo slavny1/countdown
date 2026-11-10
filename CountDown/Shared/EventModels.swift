@@ -367,6 +367,11 @@ enum DayCount {
                          selection override: TimeUnitSelection? = nil) -> [CountReading] {
         if phase(for: event, now: now, calendar: calendar) == .now { return [] }
         let selected = override ?? event.displayUnits
+        if event.countsUp && now < event.date.date(in: calendar) {
+            return (selected.automatic ? [.minutes] : selected.selected).map {
+                CountReading(number: 0, unit: $0, isFuture: false)
+            }
+        }
         if selected.automatic {
             return [reading(for: event, now: now, calendar: calendar)]
         }
