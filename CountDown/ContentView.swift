@@ -22,9 +22,13 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var editor: EditorRoute?
     @State private var selectedEvent: CountEvent?
+    @State private var expandedNotes: Set<UUID> = []
 
     private var sortedEvents: [CountEvent] {
-        store.events.sorted { $0.date.date() < $1.date.date() }
+        store.events.enumerated().sorted { left, right in
+            if left.element.isPinned != right.element.isPinned { return left.element.isPinned }
+            return left.offset < right.offset
+        }.map(\.element)
     }
 
     var body: some View {
@@ -70,27 +74,72 @@ struct ContentView: View {
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         List {
                             ForEach(sortedEvents) { event in
-                                Button {
-                                    selectedEvent = event
-                                } label: {
-                                    EventCard(event: event, now: context.date)
+                                VStack(spacing: 0) {
+                                    Button {
+                                        if event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            selectedEvent = event
+                                        } else {
+                                            if expandedNotes.contains(event.id) {
+                                                expandedNotes.remove(event.id)
+                                            } else {
+                                                expandedNotes.insert(event.id)
+                                            }
+                                        }
+                                    } label: {
+                                        EventCard(event: event, now: context.date)
+                                    }
+                                    .buttonStyle(.plain)
+                                    if expandedNotes.contains(event.id) && !event.note.isEmpty {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            ScrollView(.vertical) {
+                                                Text(event.note)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .font(.body)
+                                                    .textSelection(.enabled)
+                                            }
+                                            .frame(maxHeight: 160)
+                                            Button {
+                                                selectedEvent = event
+                                            } label: {
+                                                Label("Открыть событие", systemImage: "arrow.up.right")
+                                                    .font(.caption.weight(.semibold))
+                                            }
+                                        }
+                                        .padding(16)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                                    in: UnevenRoundedRectangle(bottomLeadingRadius: 20, bottomTrailingRadius: 20))
+                                        .padding(.horizontal, 5)
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                    }
                                 }
-                                .buttonStyle(.plain)
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)
                                 .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     Button {
-                                        editor = .edit(event)
+                                        store.togglePin(event)
                                     } label: {
+                                        Label(event.isPinned ? "Открепить" : "Закрепить",
+                                              systemImage: event.isPinned ? "pin.slash" : "pin")
+                                    }
+                                    .tint(.orange)
+                                    Button { editor = .edit(event) } label: {
                                         Label("Изменить", systemImage: "pencil")
                                     }
                                     .tint(.indigo)
                                     Button(role: .destructive) {
                                         store.remove(event)
+                                        expandedNotes.remove(event.id)
                                     } label: {
                                         Label("Удалить", systemImage: "trash")
                                     }
+                                }
+                                .draggable(event.id.uuidString)
+                                .dropDestination(for: String.self) { items, _ in
+                                    guard let id = items.first.flatMap(UUID.init(uuidString:)) else { return false }
+                                    store.move(id, before: event.id)
+                                    return true
                                 }
                             }
                         }
