@@ -22,6 +22,8 @@ struct CardStyleCustomizer: View {
     @State private var customTextColor = Color.white
     @State private var customBackgroundColor = Color.white
     @State private var customMaskColor = Color.black
+    @State private var customTextSwatches: [String] = []
+    @State private var editingTextColor = false
     @State private var customBackgroundSwatches: [String] = []
     @State private var customMaskSwatches: [String] = []
     @State private var editingPalette: PaletteTarget?
@@ -57,6 +59,7 @@ struct CardStyleCustomizer: View {
     }
 
     private let maskSwatches = ["141414", "142957", "F0E3D1", "FFFFFF"]
+    private let textSwatches = ["FFFFFF", "1B2029", "F0E3D1", "F6CF59", "C8E9FF"]
 
     private var currentPhoto: UIImage? {
         if removePhoto { return nil }
@@ -161,6 +164,7 @@ struct CardStyleCustomizer: View {
                 customTextColor = Color(rgbHex: style.textColorHex)
                 customMaskColor = Color(rgbHex: maskColorHex)
                 customBackgroundColor = Color(rgbHex: backgroundColorHex ?? "F0E3D1")
+                customTextSwatches = UserDefaults.standard.stringArray(forKey: "days.customTextColors") ?? []
                 customBackgroundSwatches = UserDefaults.standard.stringArray(forKey: "days.customBackgrounds") ?? []
                 customMaskSwatches = UserDefaults.standard.stringArray(forKey: "days.customMasks") ?? []
             }
@@ -178,6 +182,32 @@ struct CardStyleCustomizer: View {
             }
             .alert("Не удалось открыть фотографию", isPresented: $loadError) {
                 Button("OK", role: .cancel) {}
+            }
+            .sheet(isPresented: $editingTextColor) {
+                NavigationStack {
+                    Form {
+                        ColorPicker("Выбери цвет текста", selection: $customTextColor,
+                                    supportsOpacity: false)
+                    }
+                    .navigationTitle("Цвет текста")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Отмена") { editingTextColor = false }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Добавить") {
+                                let hex = customTextColor.rgbHex
+                                style.textColorHex = hex
+                                if !textSwatches.contains(hex) && !customTextSwatches.contains(hex) {
+                                    customTextSwatches.append(hex)
+                                    UserDefaults.standard.set(customTextSwatches, forKey: "days.customTextColors")
+                                }
+                                editingTextColor = false
+                            }
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
             }
             .sheet(item: $editingPalette) { target in
                 NavigationStack {
@@ -271,12 +301,28 @@ struct CardStyleCustomizer: View {
     private var colorControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeading("Цвет текста")
-            swatches(CardColorPalette.swatches, selected: style.textColorHex) { hex in
-                style.textColorHex = hex
-                customTextColor = Color(rgbHex: hex)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 14) {
+                ForEach(textSwatches + customTextSwatches.filter { !textSwatches.contains($0) },
+                        id: \.self) { hex in
+                    circleColor(hex, selected: style.textColorHex == hex) {
+                        style.textColorHex = hex
+                        customTextColor = Color(rgbHex: hex)
+                    }
+                }
+                Button {
+                    customTextColor = Color(rgbHex: style.textColorHex)
+                    editingTextColor = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.headline)
+                        .frame(width: 43, height: 43)
+                        .background(.thinMaterial, in: Circle())
+                }
+                .accessibilityLabel("Добавить цвет текста")
             }
-            ColorPicker("Другой цвет", selection: $customTextColor, supportsOpacity: false)
-                .onChange(of: customTextColor) { _, value in style.textColorHex = value.rgbHex }
+            Text("Собственные цвета сохраняются в палитре")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
