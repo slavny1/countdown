@@ -40,6 +40,8 @@ struct EventDetail: View {
                             .font(.system(size: 32 * CGFloat(min(max(liveEvent.style.scale, 0.7), 1.6)),
                                           weight: liveEvent.style.thickness.fontWeight,
                                           design: liveEvent.style.typeface.fontDesign))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.38)
                         Text(liveEvent.date.displayLabel)
                             .font(.subheadline.weight(.medium))
                     }
