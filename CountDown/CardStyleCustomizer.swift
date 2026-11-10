@@ -22,13 +22,38 @@ struct CardStyleCustomizer: View {
     @State private var customTextColor = Color.white
     @State private var customBackgroundColor = Color.white
     @State private var customMaskColor = Color.black
-    @State private var showsCustomBackground = false
-    @State private var showsCustomMask = false
+    @State private var customBackgroundSwatches: [String] = []
+    @State private var customMaskSwatches: [String] = []
+    @State private var editingPalette: PaletteTarget?
     @State private var loadError = false
 
     private enum SectionChoice: String, CaseIterable, Identifiable {
         case font = "Шрифт", color = "Цвет", background = "Фон"
         var id: String { rawValue }
+    }
+
+    private enum PaletteTarget: String, Identifiable {
+        case background, mask
+        var id: String { rawValue }
+    }
+
+    private func saveCustomColor(_ target: PaletteTarget) {
+        let hex = (target == .background ? customBackgroundColor : customMaskColor).rgbHex
+        switch target {
+        case .background:
+            backgroundColorHex = hex
+            if !customBackgroundSwatches.contains(hex) {
+                customBackgroundSwatches.append(hex)
+                UserDefaults.standard.set(customBackgroundSwatches, forKey: "days.customBackgrounds")
+            }
+        case .mask:
+            maskColorHex = hex
+            if !customMaskSwatches.contains(hex) {
+                customMaskSwatches.append(hex)
+                UserDefaults.standard.set(customMaskSwatches, forKey: "days.customMasks")
+            }
+        }
+        editingPalette = nil
     }
 
     private let maskSwatches = ["141414", "142957", "F0E3D1", "FFFFFF"]
@@ -136,6 +161,8 @@ struct CardStyleCustomizer: View {
                 customTextColor = Color(rgbHex: style.textColorHex)
                 customMaskColor = Color(rgbHex: maskColorHex)
                 customBackgroundColor = Color(rgbHex: backgroundColorHex ?? "F0E3D1")
+                customBackgroundSwatches = UserDefaults.standard.stringArray(forKey: "days.customBackgrounds") ?? []
+                customMaskSwatches = UserDefaults.standard.stringArray(forKey: "days.customMasks") ?? []
             }
             .onChange(of: selectedPhoto) { _, selection in
                 guard let selection else { return }
@@ -151,6 +178,26 @@ struct CardStyleCustomizer: View {
             }
             .alert("Не удалось открыть фотографию", isPresented: $loadError) {
                 Button("OK", role: .cancel) {}
+            }
+            .sheet(item: $editingPalette) { target in
+                NavigationStack {
+                    Form {
+                        ColorPicker("Выбери цвет", selection:
+                            target == .background ? $customBackgroundColor : $customMaskColor,
+                            supportsOpacity: false)
+                    }
+                    .navigationTitle("Свой цвет")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Отмена") { editingPalette = nil }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Добавить") { saveCustomColor(target) }
+                                .bold()
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
             }
         }
     }
@@ -260,26 +307,25 @@ struct CardStyleCustomizer: View {
                     Slider(value: $photoFocusY, in: 0...1)
                 }
                 sectionHeading("Цвет маски")
-                HStack(spacing: 12) {
-                    ForEach(maskSwatches, id: \.self) { hex in
-                        circleColor(hex, selected: maskColorHex == hex) {
-                            maskColorHex = hex
-                            customMaskColor = Color(rgbHex: hex)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(maskSwatches + customMaskSwatches.filter { !maskSwatches.contains($0) }, id: \.self) { hex in
+                            circleColor(hex, selected: maskColorHex == hex) {
+                                maskColorHex = hex
+                                customMaskColor = Color(rgbHex: hex)
+                            }
                         }
+                        Button {
+                            customMaskColor = Color(rgbHex: maskColorHex)
+                            editingPalette = .mask
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.headline)
+                                .frame(width: 43, height: 43)
+                                .background(.thinMaterial, in: Circle())
+                        }
+                        .accessibilityLabel("Добавить цвет маски")
                     }
-                    Button {
-                        showsCustomMask.toggle()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.headline)
-                            .frame(width: 43, height: 43)
-                            .background(.thinMaterial, in: Circle())
-                    }
-                    .accessibilityLabel("Свой цвет маски")
-                }
-                if showsCustomMask {
-                    ColorPicker("Свой цвет маски", selection: $customMaskColor, supportsOpacity: false)
-                        .onChange(of: customMaskColor) { _, color in maskColorHex = color.rgbHex }
                 }
                 HStack {
                     Text("Непрозрачность")
@@ -289,38 +335,41 @@ struct CardStyleCustomizer: View {
                 }
             } else {
                 sectionHeading("Фон без фото")
-                HStack(spacing: 9) {
-                    ForEach(EventPalette.allCases) { value in
-                        Button {
-                            palette = value
-                            backgroundColorHex = nil
-                        } label: {
-                            Circle()
-                                .fill(value.gradient)
-                                .frame(width: 39, height: 39)
-                                .overlay {
-                                    if palette == value && backgroundColorHex == nil {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(.white)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 9) {
+                        ForEach(EventPalette.allCases) { value in
+                            Button {
+                                palette = value
+                                backgroundColorHex = nil
+                            } label: {
+                                Circle()
+                                    .fill(value.gradient)
+                                    .frame(width: 39, height: 39)
+                                    .overlay {
+                                        if palette == value && backgroundColorHex == nil {
+                                            Image(systemName: "checkmark").foregroundStyle(.white)
+                                        }
                                     }
-                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(value.title)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(value.title)
-                    }
-                    Button { showsCustomBackground.toggle() } label: {
-                        Image(systemName: "plus")
-                            .font(.headline)
-                            .frame(width: 39, height: 39)
-                            .background(.thinMaterial, in: Circle())
-                    }
-                    .accessibilityLabel("Свой цвет фона")
-                }
-                if showsCustomBackground || backgroundColorHex != nil {
-                    ColorPicker("Цвет фона", selection: $customBackgroundColor, supportsOpacity: false)
-                        .onChange(of: customBackgroundColor) { _, color in
-                            backgroundColorHex = color.rgbHex
+                        ForEach(customBackgroundSwatches, id: \.self) { hex in
+                            circleColor(hex, selected: backgroundColorHex == hex) {
+                                backgroundColorHex = hex
+                            }
                         }
+                        Button {
+                            customBackgroundColor = Color(rgbHex: backgroundColorHex ?? "F0E3D1")
+                            editingPalette = .background
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.headline)
+                                .frame(width: 39, height: 39)
+                                .background(.thinMaterial, in: Circle())
+                        }
+                        .accessibilityLabel("Добавить цвет фона")
+                    }
                 }
             }
         }
