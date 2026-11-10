@@ -552,7 +552,10 @@ private struct CountWidgetFace: View {
             }
         }
         .containerBackground(for: .widget) { WidgetBackground(entry: entry) }
-        .widgetURL(entry.preset.flatMap { URL(string: "dni://widget/\($0.id.uuidString)") })
+        .widgetURL(
+            entry.preset.flatMap { URL(string: "dni://widget/\($0.id.uuidString)") } ??
+            entry.event.flatMap { URL(string: "dni://event/\($0.id.uuidString)") }
+        )
         .accessibilityElement(children: .combine)
     }
 
