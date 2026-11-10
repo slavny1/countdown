@@ -6,7 +6,6 @@ struct EventDetail: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: EventStore
     @State private var showingSettings = false
-    @State private var previewWide = true
 
     private var currentEvent: CountEvent {
         store.events.first(where: { $0.id == event.id }) ?? event
@@ -37,8 +36,10 @@ struct EventDetail: View {
                         EventNumber(reading: reading, large: true, style: liveEvent.style)
                             .frame(maxWidth: .infinity, alignment: liveEvent.style.swiftUIAlignment)
                         Text(liveEvent.title)
-                            .font(.system(size: 32, weight: .bold, design: .serif))
-                        Text(liveEvent.date.date().formatted(.dateTime.day().month(.wide).year()))
+                            .font(.system(size: 32 * CGFloat(min(max(liveEvent.style.scale, 0.7), 1.6)),
+                                          weight: liveEvent.style.thickness.fontWeight,
+                                          design: liveEvent.style.typeface.fontDesign))
+                        Text(liveEvent.date.displayLabel)
                             .font(.subheadline.weight(.medium))
                     }
                     .foregroundStyle(liveEvent.style.textColor)
@@ -63,22 +64,30 @@ struct EventDetail: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Предпросмотр виджета")
+                            Text("Виджеты")
                                 .font(.title2.bold())
                             Spacer()
-                            Button("Настроить") { showingSettings = true }
-                                .font(.subheadline)
+                            Button {
+                                showingSettings = true
+                            } label: {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.title3)
+                                    .frame(width: 38, height: 38)
+                                    .background(.thinMaterial, in: Circle())
+                            }
+                            .accessibilityLabel("Настроить виджеты")
                         }
-                        Picker("Размер", selection: $previewWide) {
-                            Text("Малый").tag(false)
-                            Text("Широкий").tag(true)
+                        HStack {
+                            WidgetCardPreview(event: liveEvent,
+                                              image: EventPhotoStore.image(named: liveEvent.photoFilename),
+                                              wide: false)
+                                .frame(width: 172, height: 172)
+                            Spacer()
                         }
-                        .pickerStyle(.segmented)
                         WidgetCardPreview(event: liveEvent,
                                           image: EventPhotoStore.image(named: liveEvent.photoFilename),
-                                          wide: previewWide)
-                            .frame(maxWidth: previewWide ? .infinity : 190)
-                            .frame(height: 170)
+                                          wide: true)
+                            .frame(height: 172)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -97,6 +106,19 @@ struct EventDetail: View {
                     }
                 }
                 .padding(20)
+                if liveEvent.countsUp {
+                    Button {
+                        restart()
+                    } label: {
+                        Label("Обнулить счётчик", systemImage: "arrow.counterclockwise")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 22)
+                }
             }
         }
         .navigationTitle("Событие")
@@ -109,20 +131,6 @@ struct EventDetail: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Готово") { dismiss() }
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            if currentEvent.countsUp {
-                Button {
-                    restart()
-                } label: {
-                    Label("Начать заново с текущего момента", systemImage: "arrow.counterclockwise")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(.regularMaterial)
             }
         }
         .sheet(isPresented: $showingSettings) {

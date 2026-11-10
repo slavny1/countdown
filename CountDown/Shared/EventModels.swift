@@ -31,6 +31,14 @@ struct CalendarDay: Codable, Hashable {
 
     var includesTime: Bool { hour != nil }
 
+    var displayLabel: String {
+        let value = date()
+        let dateText = value.formatted(.dateTime.day().month(.wide).year())
+        return includesTime
+            ? dateText + " · " + value.formatted(.dateTime.hour().minute())
+            : dateText
+    }
+
     func date(in calendar: Calendar = .current) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day,
                                            hour: hour ?? 0, minute: minute ?? 0, second: second ?? 0))
@@ -39,7 +47,7 @@ struct CalendarDay: Codable, Hashable {
 }
 
 enum EventPalette: String, Codable, CaseIterable, Identifiable {
-    case coral, ocean, violet, forest
+    case coral, ocean, violet, forest, sand
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -47,6 +55,7 @@ enum EventPalette: String, Codable, CaseIterable, Identifiable {
         case .ocean: "Океан"
         case .violet: "Лаванда"
         case .forest: "Лес"
+        case .sand: "Песок"
         }
     }
 }
@@ -159,6 +168,8 @@ struct CountEvent: Identifiable, Codable, Hashable {
     var photoZoom: Double
     var photoFocusX: Double
     var photoFocusY: Double
+    var backgroundColorHex: String?
+    var isPinned: Bool
     var style: CardStyle
     var countsUp: Bool
 
@@ -169,6 +180,7 @@ struct CountEvent: Identifiable, Codable, Hashable {
          mask: PhotoMask = .black, maskOpacity: Double = 0.55,
          maskColorHex: String? = nil, photoZoom: Double = 1,
          photoFocusX: Double = 0.5, photoFocusY: Double = 0.5,
+         backgroundColorHex: String? = nil, isPinned: Bool = false,
          style: CardStyle = CardStyle(), countsUp: Bool = false) {
         self.id = id
         self.title = title
@@ -185,6 +197,8 @@ struct CountEvent: Identifiable, Codable, Hashable {
         self.photoZoom = min(max(photoZoom, 1), 2.5)
         self.photoFocusX = min(max(photoFocusX, 0), 1)
         self.photoFocusY = min(max(photoFocusY, 0), 1)
+        self.backgroundColorHex = backgroundColorHex
+        self.isPinned = isPinned
         self.style = style
         self.countsUp = countsUp
     }
@@ -192,7 +206,7 @@ struct CountEvent: Identifiable, Codable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, title, date, palette, symbol, note, unit
         case showsMilestones, photoFilename, mask, maskOpacity, maskColorHex
-        case photoZoom, photoFocusX, photoFocusY, style, countsUp
+        case photoZoom, photoFocusX, photoFocusY, backgroundColorHex, isPinned, style, countsUp
     }
 
     // Older events only contain id, title, date, palette, and symbol.
@@ -213,6 +227,8 @@ struct CountEvent: Identifiable, Codable, Hashable {
         photoZoom = min(max(try c.decodeIfPresent(Double.self, forKey: .photoZoom) ?? 1, 1), 2.5)
         photoFocusX = min(max(try c.decodeIfPresent(Double.self, forKey: .photoFocusX) ?? 0.5, 0), 1)
         photoFocusY = min(max(try c.decodeIfPresent(Double.self, forKey: .photoFocusY) ?? 0.5, 0), 1)
+        backgroundColorHex = try c.decodeIfPresent(String.self, forKey: .backgroundColorHex)
+        isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         style = try c.decodeIfPresent(CardStyle.self, forKey: .style) ?? CardStyle()
         countsUp = try c.decodeIfPresent(Bool.self, forKey: .countsUp) ?? false
     }
