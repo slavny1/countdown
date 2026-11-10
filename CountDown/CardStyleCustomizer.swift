@@ -86,7 +86,8 @@ struct CardStyleCustomizer: View {
                     VStack(alignment: .leading, spacing: 12) {
                         sectionHeading("Карточка")
                         EventCard(event: liveEvent, now: .now, previewImage: currentPhoto)
-                            .frame(height: 176)
+                            .frame(minHeight: 178 + max(0, CGFloat(style.scale) - 1) * 74)
+                            .animation(.easeInOut(duration: 0.28), value: style.scale)
                         HStack {
                             sectionHeading("Виджеты")
                             Spacer()
