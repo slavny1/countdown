@@ -178,6 +178,10 @@ private struct WidgetEvent: Decodable {
         if isNow(at: now, calendar: calendar) { return [] }
         let units = selectedUnits ?? displayUnits ?? .legacy(unit)
         let target = date.date(in: calendar)
+        if countsUp == true && now < target {
+            let requested = units.automatic ? ["minutes"] : units.selected
+            return requested.map { WidgetReading(number: 0, unit: $0, isFuture: false) }
+        }
         let isFuture = countsUp != true && now < target
         let elapsed = countsUp == true ? max(0, now.timeIntervalSince(target))
                                         : abs(target.timeIntervalSince(now))
