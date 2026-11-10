@@ -54,6 +54,23 @@ struct ContentView: View {
     @State private var expandedNotes: Set<UUID> = []
     @State private var draggedID: UUID?
     @State private var openedPreset: WidgetPreset?
+    @AppStorage("days.celebrations.dismissed") private var dismissedCelebrations = ""
+
+    private func celebrationKey(for event: CountEvent) -> String {
+        "\(event.id.uuidString)-\(event.date.year)-\(event.date.month)-\(event.date.day)"
+    }
+
+    private func canCelebrate(_ event: CountEvent, at date: Date) -> Bool {
+        DayCount.phase(for: event, now: date) == .now &&
+        !dismissedCelebrations.split(separator: "|").contains(Substring(celebrationKey(for: event)))
+    }
+
+    private func dismissCelebration(_ event: CountEvent) {
+        let key = celebrationKey(for: event)
+        withAnimation(.easeOut(duration: 0.45)) {
+            dismissedCelebrations = dismissedCelebrations + "|" + key
+        }
+    }
 
     private var sortedEvents: [CountEvent] {
         store.events.enumerated()
@@ -211,6 +228,15 @@ struct ContentView: View {
                 if let event = store.events.first(where: { $0.id == preset.eventID }) {
                     WidgetPresetEditor(event: event, existing: preset)
                         .environmentObject(store)
+                }
+            }
+            .overlay {
+                TimelineView(.periodic(from: .now, by: 1)) { clock in
+                    if let event = sortedEvents.first(where: { canCelebrate($0, at: clock.date) }) {
+                        CelebrationOverlay(event: event) {
+                            dismissCelebration(event)
+                        }
+                    }
                 }
             }
             .onOpenURL { url in
