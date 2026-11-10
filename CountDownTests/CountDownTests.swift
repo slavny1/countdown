@@ -120,6 +120,26 @@ struct CountDownTests {
         #expect(event.photoFocusY == 0.5)
     }
 
+    @Test func pinAndCustomBackgroundSurviveSave() throws {
+        let original = CountEvent(title: "Закреплено",
+                                  date: CalendarDay(year: 2026, month: 12, day: 12),
+                                  backgroundColorHex: "AABBCD", isPinned: true)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(CountEvent.self, from: data)
+        #expect(decoded.isPinned)
+        #expect(decoded.backgroundColorHex == "AABBCD")
+    }
+
+    @Test func legacyEventHasNoPinOrCustomBackground() throws {
+        let legacy = """
+        {"id":"00000000-0000-0000-0000-000000000044","title":"Старая дата","date":{"year":2026,"month":4,"day":30},"palette":"ocean","symbol":"calendar"}
+        """
+        let event = try JSONDecoder().decode(CountEvent.self, from: Data(legacy.utf8))
+        #expect(!event.isPinned)
+        #expect(event.backgroundColorHex == nil)
+        #expect(event.date.displayLabel.contains("2026"))
+    }
+
     @Test func monthsAreCalendarAware() {
         let now = utcCalendar.date(from: DateComponents(year: 2026, month: 5, day: 1))!
         let event = CountEvent(title: "Дата", date: CalendarDay(year: 2026, month: 4, day: 30))
