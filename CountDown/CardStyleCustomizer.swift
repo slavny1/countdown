@@ -166,6 +166,11 @@ struct CardStyleCustomizer: View {
                 customMaskColor = Color(rgbHex: maskColorHex)
                 customBackgroundColor = Color(rgbHex: backgroundColorHex ?? "F0E3D1")
                 customTextSwatches = UserDefaults.standard.stringArray(forKey: "days.customTextColors") ?? []
+                if !textSwatches.contains(style.textColorHex) &&
+                    !customTextSwatches.contains(style.textColorHex) {
+                    customTextSwatches.append(style.textColorHex)
+                    UserDefaults.standard.set(customTextSwatches, forKey: "days.customTextColors")
+                }
                 customBackgroundSwatches = UserDefaults.standard.stringArray(forKey: "days.customBackgrounds") ?? []
                 customMaskSwatches = UserDefaults.standard.stringArray(forKey: "days.customMasks") ?? []
             }
