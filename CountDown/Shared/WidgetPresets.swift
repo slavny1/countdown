@@ -29,7 +29,7 @@ struct WidgetPreset: Codable, Identifiable, Hashable {
     init(id: UUID = UUID(), event: CountEvent, size: WidgetPresetSize = .small) {
         self.id = id
         self.eventID = event.id
-        self.title = event.title
+        self.title = "\(size.title) · \(event.title)"
         self.size = size
         self.style = event.style
         self.units = size == .small
