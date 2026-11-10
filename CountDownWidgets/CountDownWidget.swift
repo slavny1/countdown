@@ -156,10 +156,10 @@ private struct WidgetEvent: Decodable {
                          opacity: 1)
         }
         switch mask {
-        case "navy": Color(red: 0.08, green: 0.16, blue: 0.34)
-        case "plum": Color(red: 0.33, green: 0.12, blue: 0.29)
-        case "brown": Color(red: 0.28, green: 0.16, blue: 0.10)
-        default: .black
+        case "navy": return Color(red: 0.08, green: 0.16, blue: 0.34)
+        case "plum": return Color(red: 0.33, green: 0.12, blue: 0.29)
+        case "brown": return Color(red: 0.28, green: 0.16, blue: 0.10)
+        default: return .black
         }
     }
 }
