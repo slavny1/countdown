@@ -350,23 +350,48 @@ private struct CountProvider: AppIntentTimelineProvider {
         let current = entry(at: now, configuration: configuration)
         let calendar = Calendar.current
         let midnight = calendar.date(byAdding: .day, value: 1,
-            to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(86400)
-        var next = midnight.addingTimeInterval(10)
+                                     to: calendar.startOfDay(for: now))
+            ?? now.addingTimeInterval(86_400)
 
+        // Timeline entries (not just a refresh request) make the "СЕЙЧАС"
+        // transition available when the app is closed.
+        var changes: [Date] = [midnight.addingTimeInterval(1)]
         if let event = current.event {
-            let remaining = event.date.date(in: calendar).timeIntervalSince(now)
-            if remaining > 0 && event.countsUp != true {
-                for threshold in [86400.0, 3600.0] where remaining > threshold {
-                    next = min(next, now.addingTimeInterval(remaining - threshold + 1))
+            let target = event.date.date(in: calendar)
+            let remaining = target.timeIntervalSince(now)
+            if remaining > 0 {
+                for threshold in [86_400.0, 3_600.0] where remaining > threshold {
+                    let transition = target.addingTimeInterval(-threshold)
+                    if transition > now && transition < midnight {
+                        changes.append(transition)
+                    }
                 }
-                next = min(next, now.addingTimeInterval(remaining + 2))
+                if target < midnight {
+                    changes.append(target.addingTimeInterval(1))
+                }
             }
-            if let first = current.readings.first {
-                if first.unit == "minutes" { next = min(next, now.addingTimeInterval(60)) }
-                else if first.unit == "hours" { next = min(next, now.addingTimeInterval(300)) }
+
+            let unit = current.readings.first?.unit ?? "days"
+            let needsMinuteUpdates = unit == "minutes" ||
+                (current.readings.contains { $0.unit == "minutes" })
+            let needsHourUpdates = unit == "hours" ||
+                (current.readings.contains { $0.unit == "hours" })
+            let interval: TimeInterval = needsMinuteUpdates ? 60 : (needsHourUpdates ? 300 : 0)
+            if interval > 0 {
+                for step in 1...12 {
+                    let date = now.addingTimeInterval(interval * Double(step))
+                    if date < midnight && date < now.addingTimeInterval(3_600) {
+                        changes.append(date)
+                    }
+                }
             }
         }
-        return Timeline(entries: [current], policy: .after(max(now.addingTimeInterval(30), next)))
+        let entries = [current] + changes
+            .filter { $0 > now.addingTimeInterval(0.5) }
+            .sorted()
+            .map { entry(at: $0, configuration: configuration) }
+        return Timeline(entries: entries,
+                        policy: .after((entries.last?.date ?? now).addingTimeInterval(60)))
     }
 
     private func entry(at now: Date, configuration: SelectCountEventIntent) -> CountEntry {
