@@ -138,7 +138,7 @@ struct EventDetail: View {
         .navigationTitle("Событие")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("Настроить", systemImage: "slider.horizontal.3") {
                     showingSettings = true
                 }
