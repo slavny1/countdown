@@ -22,6 +22,8 @@ struct CardStyleCustomizer: View {
     @State private var customTextColor = Color.white
     @State private var customBackgroundColor = Color.white
     @State private var customMaskColor = Color.black
+    @State private var customTextSwatches: [String] = []
+    @State private var editingTextColor = false
     @State private var customBackgroundSwatches: [String] = []
     @State private var customMaskSwatches: [String] = []
     @State private var editingPalette: PaletteTarget?
@@ -57,6 +59,7 @@ struct CardStyleCustomizer: View {
     }
 
     private let maskSwatches = ["141414", "142957", "F0E3D1", "FFFFFF"]
+    private let textSwatches = ["FFFFFF", "1B2029", "F6CF59", "C8E9FF"]
 
     private var currentPhoto: UIImage? {
         if removePhoto { return nil }
@@ -83,7 +86,8 @@ struct CardStyleCustomizer: View {
                     VStack(alignment: .leading, spacing: 12) {
                         sectionHeading("Карточка")
                         EventCard(event: liveEvent, now: .now, previewImage: currentPhoto)
-                            .frame(height: 176)
+                            .frame(minHeight: 178 + max(0, CGFloat(style.scale) - 1) * 74)
+                            .animation(.easeInOut(duration: 0.28), value: style.scale)
                         HStack {
                             sectionHeading("Виджеты")
                             Spacer()
@@ -161,6 +165,12 @@ struct CardStyleCustomizer: View {
                 customTextColor = Color(rgbHex: style.textColorHex)
                 customMaskColor = Color(rgbHex: maskColorHex)
                 customBackgroundColor = Color(rgbHex: backgroundColorHex ?? "F0E3D1")
+                customTextSwatches = UserDefaults.standard.stringArray(forKey: "days.customTextColors") ?? []
+                if !textSwatches.contains(style.textColorHex) &&
+                    !customTextSwatches.contains(style.textColorHex) {
+                    customTextSwatches.append(style.textColorHex)
+                    UserDefaults.standard.set(customTextSwatches, forKey: "days.customTextColors")
+                }
                 customBackgroundSwatches = UserDefaults.standard.stringArray(forKey: "days.customBackgrounds") ?? []
                 customMaskSwatches = UserDefaults.standard.stringArray(forKey: "days.customMasks") ?? []
             }
@@ -178,6 +188,32 @@ struct CardStyleCustomizer: View {
             }
             .alert("Не удалось открыть фотографию", isPresented: $loadError) {
                 Button("OK", role: .cancel) {}
+            }
+            .sheet(isPresented: $editingTextColor) {
+                NavigationStack {
+                    Form {
+                        ColorPicker("Выбери цвет текста", selection: $customTextColor,
+                                    supportsOpacity: false)
+                    }
+                    .navigationTitle("Цвет текста")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Отмена") { editingTextColor = false }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Добавить") {
+                                let hex = customTextColor.rgbHex
+                                style.textColorHex = hex
+                                if !textSwatches.contains(hex) && !customTextSwatches.contains(hex) {
+                                    customTextSwatches.append(hex)
+                                    UserDefaults.standard.set(customTextSwatches, forKey: "days.customTextColors")
+                                }
+                                editingTextColor = false
+                            }
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
             }
             .sheet(item: $editingPalette) { target in
                 NavigationStack {
@@ -271,12 +307,28 @@ struct CardStyleCustomizer: View {
     private var colorControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeading("Цвет текста")
-            swatches(CardColorPalette.swatches, selected: style.textColorHex) { hex in
-                style.textColorHex = hex
-                customTextColor = Color(rgbHex: hex)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(textSwatches + customTextSwatches.filter { !textSwatches.contains($0) },
+                            id: \.self) { hex in
+                        circleColor(hex, selected: style.textColorHex == hex) {
+                            style.textColorHex = hex
+                            customTextColor = Color(rgbHex: hex)
+                        }
+                    }
+                    Button {
+                        customTextColor = Color(rgbHex: style.textColorHex)
+                        editingTextColor = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline)
+                            .frame(width: 43, height: 43)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Добавить цвет текста")
+                }
             }
-            ColorPicker("Другой цвет", selection: $customTextColor, supportsOpacity: false)
-                .onChange(of: customTextColor) { _, value in style.textColorHex = value.rgbHex }
+            .frame(height: 50)
         }
     }
 
@@ -292,6 +344,8 @@ struct CardStyleCustomizer: View {
                     pendingImage = nil
                     selectedPhoto = nil
                     removePhoto = true
+                    // Removing the image returns to the event's gradient.
+                    backgroundColorHex = nil
                 }
                 .font(.subheadline)
                 HStack {
@@ -402,69 +456,121 @@ struct CardStyleCustomizer: View {
     }
 }
 
-/// Same layout as the Home Screen widget. This is a preview, not an actual WidgetKit snapshot.
+/// Approximation of the actual WidgetKit composition for preset editing.
 struct WidgetCardPreview: View {
     let event: CountEvent
     let image: UIImage?
     let wide: Bool
+    var large: Bool = false
 
-    private var count: CountReading { DayCount.reading(for: event) }
+    private var phase: EventPhase { DayCount.phase(for: event) }
+    private var values: [CountReading] {
+        let result = DayCount.readings(for: event)
+        return !wide ? Array(result.prefix(1)) : result
+    }
+    private var scale: CGFloat { CGFloat(min(max(event.style.scale, 0.7), 1.6)) }
 
     var body: some View {
         Group {
-            if wide {
-                HStack(alignment: .center, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(count.direction.uppercased())
-                            .font(.system(size: 10, weight: .heavy, design: .rounded))
-                            .tracking(1.4)
+            if large {
+                VStack(alignment: .leading, spacing: 15) {
+                    header
+                    Spacer(minLength: 0)
+                    timeDisplay(fontSize: 55)
+                    Text(event.title)
+                        .font(.system(size: 23 * scale, weight: event.style.thickness.fontWeight,
+                                      design: event.style.typeface.fontDesign))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.5)
+                    Text(event.date.displayLabel)
+                        .font(.caption)
+                        .opacity(0.85)
+                    Divider().overlay(event.style.textColor.opacity(0.4))
+                    Text(event.note.isEmpty ? "Заметка к событию" : event.note)
+                        .font(.system(size: 13, weight: .regular))
+                        .lineLimit(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(20)
+            } else if wide {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        header
                         Text(event.title)
-                            .font(.system(size: 21, weight: event.style.thickness.fontWeight,
+                            .font(.system(size: 20 * scale, weight: event.style.thickness.fontWeight,
                                           design: event.style.typeface.fontDesign))
                             .lineLimit(2)
+                            .minimumScaleFactor(0.45)
                         Text(event.date.displayLabel)
-                            .font(.caption.weight(.medium))
-                            .opacity(0.85)
+                            .font(.caption2.weight(.medium))
+                            .lineLimit(2)
+                            .opacity(0.9)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text(count.number, format: .number)
-                            .font(.system(size: 76 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
-                                          weight: event.style.thickness.fontWeight,
-                                          design: event.style.typeface.fontDesign))
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.35)
-                            .lineLimit(1)
-                        Text(count.unitLabel)
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    timeDisplay(fontSize: values.count > 1 ? 34 : 73)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .padding(14)
+                .padding(15)
             } else {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(count.direction.uppercased())
-                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    header
                     Spacer(minLength: 0)
-                    Text(count.number, format: .number)
-                        .font(.system(size: 74 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
-                                      weight: event.style.thickness.fontWeight,
-                                      design: event.style.typeface.fontDesign))
-                        .minimumScaleFactor(0.3)
-                        .lineLimit(1)
-                        .monospacedDigit()
-                    Text(count.unitLabel).font(.caption.weight(.semibold))
+                    timeDisplay(fontSize: 76)
                     Text(event.title)
-                        .font(.system(size: 15, weight: event.style.thickness.fontWeight,
+                        .font(.system(size: 15 * scale, weight: event.style.thickness.fontWeight,
                                       design: event.style.typeface.fontDesign))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.4)
                 }
-                .padding(13)
+                .padding(14)
             }
         }
         .foregroundStyle(event.style.textColor)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { EventBackground(event: event, previewImage: image) }
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .animation(.easeInOut(duration: 0.22), value: event.style.scale)
+    }
+
+    private var header: some View {
+        Text(phase == .now ? "ЭТОТ ДЕНЬ НАСТАЛ" :
+             event.countsUp || event.date.date() < Date() ? "ПРОШЛО" : "ОСТАЛОСЬ")
+            .font(.system(size: 9, weight: .heavy, design: .rounded))
+            .tracking(1.1)
+    }
+
+    @ViewBuilder
+    private func timeDisplay(fontSize: CGFloat) -> some View {
+        if phase == .now {
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                Text("СЕЙЧАС")
+                    .font(.system(size: min(fontSize * 0.68 * scale, 53),
+                                  weight: event.style.thickness.fontWeight,
+                                  design: event.style.typeface.fontDesign))
+                    .minimumScaleFactor(0.4)
+                    .lineLimit(1)
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                ForEach(values.indices, id: \.self) { i in
+                    let reading = values[i]
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(reading.number, format: .number)
+                            .font(.system(size: fontSize * scale,
+                                          weight: event.style.thickness.fontWeight,
+                                          design: event.style.typeface.fontDesign))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.3)
+                            .lineLimit(1)
+                            .contentTransition(.numericText())
+                        Text(reading.unitLabel)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
     }
 }

@@ -3,26 +3,27 @@ import SwiftUI
 import UIKit
 import WidgetKit
 
-// Widget-only decoder. The application owns the data model; both read the same
-// backward-compatible JSON in the shared App Group.
-private enum SharedEvents {
-    static let group = "group.com.slavny1.countdown"
-    static let key = "countdown.events.v1"
+private enum SharedData {
+    static let appGroup = "group.com.slavny1.countdown"
+    static let eventKey = "countdown.events.v1"
+    static let presetKey = "countdown.widget-presets.v1"
 
-    static func all() -> [WidgetEvent] {
-        guard let data = UserDefaults(suiteName: group)?.data(forKey: key),
-              let events = try? JSONDecoder().decode([WidgetEvent].self, from: data) else {
-            return []
-        }
-        return events
+    private static var defaults: UserDefaults? { UserDefaults(suiteName: appGroup) }
+
+    static func events() -> [WidgetEvent] {
+        guard let data = defaults?.data(forKey: eventKey) else { return [] }
+        return (try? JSONDecoder().decode([WidgetEvent].self, from: data)) ?? []
+    }
+
+    static func presets() -> [WidgetPresetData] {
+        guard let data = defaults?.data(forKey: presetKey) else { return [] }
+        return (try? JSONDecoder().decode([WidgetPresetData].self, from: data)) ?? []
     }
 
     static func photo(named name: String?) -> UIImage? {
-        guard let name,
-              let directory = FileManager.default.containerURL(
-                forSecurityApplicationGroupIdentifier: group
-              ) else { return nil }
-        let url = directory.appendingPathComponent("EventPhotos", isDirectory: true)
+        guard let name, let container = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: appGroup) else { return nil }
+        let url = container.appendingPathComponent("EventPhotos", isDirectory: true)
             .appendingPathComponent(name)
         return UIImage(contentsOfFile: url.path)
     }
@@ -38,8 +39,14 @@ private struct WidgetDay: Decodable {
 
     func date(in calendar: Calendar = .current) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day,
-                                           hour: hour ?? 0, minute: minute ?? 0, second: second ?? 0))
-        ?? calendar.startOfDay(for: .now)
+                                           hour: hour ?? 0, minute: minute ?? 0,
+                                           second: second ?? 0)) ?? calendar.startOfDay(for: .now)
+    }
+
+    var label: String {
+        let value = date()
+        let day = value.formatted(.dateTime.day().month(.wide).year())
+        return hour == nil ? day : day + " · " + value.formatted(.dateTime.hour().minute())
     }
 }
 
@@ -51,12 +58,7 @@ private struct WidgetCardStyle: Decodable {
     let alignment: String
     let unitPlacement: String
 
-    var color: Color {
-        let value = UInt64(textColorHex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0xFFFFFF
-        return Color(.sRGB, red: Double((value >> 16) & 0xFF) / 255,
-                     green: Double((value >> 8) & 0xFF) / 255,
-                     blue: Double(value & 0xFF) / 255, opacity: 1)
-    }
+    var color: Color { Color(rgbHex: textColorHex) }
 
     var design: Font.Design {
         switch typeface {
@@ -78,8 +80,7 @@ private struct WidgetCardStyle: Decodable {
         }
     }
 
-    var placementBelow: Bool { unitPlacement == "below" }
-    var centered: Bool { alignment == "center" }
+    var scaleValue: CGFloat { CGFloat(min(max(scale, 0.7), 1.6)) }
 
     static let standard = WidgetCardStyle(
         typeface: "editorial", thickness: "bold", scale: 1,
@@ -87,106 +88,175 @@ private struct WidgetCardStyle: Decodable {
     )
 }
 
+private extension Color {
+    init(rgbHex: String) {
+        let value = UInt64(rgbHex.trimmingCharacters(in: CharacterSet(charactersIn: "#")),
+                           radix: 16) ?? 0xFFFFFF
+        self.init(.sRGB,
+                  red: Double((value >> 16) & 255) / 255,
+                  green: Double((value >> 8) & 255) / 255,
+                  blue: Double(value & 255) / 255,
+                  opacity: 1)
+    }
+}
+
+private struct WidgetUnits: Decodable {
+    let automatic: Bool
+    let days: Bool
+    let hours: Bool
+    let minutes: Bool
+
+    var selected: [String] {
+        var chosen: [String] = []
+        if days { chosen.append("days") }
+        if hours { chosen.append("hours") }
+        if minutes { chosen.append("minutes") }
+        return chosen.isEmpty ? ["days"] : chosen
+    }
+
+    static func legacy(_ unit: String?) -> WidgetUnits {
+        let u = unit ?? "automatic"
+        return WidgetUnits(automatic: u == "automatic",
+                           days: u == "days" || u == "automatic",
+                           hours: u == "hours", minutes: u == "minutes")
+    }
+}
+
 private struct WidgetEvent: Decodable {
     let id: UUID
     let title: String
     let date: WidgetDay
     let palette: String
-    let backgroundColorHex: String?
     let symbol: String
+    let note: String?
     let unit: String?
+    let displayUnits: WidgetUnits?
     let photoFilename: String?
+    let maskColorHex: String?
     let mask: String?
     let maskOpacity: Double?
-    let maskColorHex: String?
     let photoZoom: Double?
     let photoFocusX: Double?
     let photoFocusY: Double?
+    let backgroundColorHex: String?
     let countsUp: Bool?
     let style: WidgetCardStyle?
 
-    func calendarDays(from now: Date, calendar: Calendar = .current) -> Int {
-        calendar.dateComponents([.day],
-            from: calendar.startOfDay(for: now),
-            to: calendar.startOfDay(for: date.date(in: calendar))).day ?? 0
-    }
-
-    func reading(now: Date, calendar: Calendar = .current) -> WidgetReading {
-        let remaining = date.date(in: calendar).timeIntervalSince(now)
-        let countUp = countsUp ?? false
-        let isFuture = !countUp && remaining >= 0
-        let seconds = countUp ? max(0, -remaining) : abs(remaining)
-        let selected: String
-        if (unit ?? "automatic") == "automatic" {
-            if countUp {
-                selected = seconds >= 86_400 ? "days" : seconds >= 3_600 ? "hours" : "minutes"
-            } else {
-                selected = !isFuture || seconds >= 86_400 ? "days"
-                         : seconds >= 3_600 ? "hours" : "minutes"
-            }
-        } else {
-            selected = unit ?? "days"
-        }
-        let number: Int
-        switch selected {
-        case "hours":
-            number = Int(isFuture ? ceil(seconds / 3600) : floor(seconds / 3600))
-        case "minutes":
-            number = Int(isFuture ? ceil(seconds / 60) : floor(seconds / 60))
-        default:
-            number = abs(calendarDays(from: now, calendar: calendar))
-        }
-        return WidgetReading(number: number, unit: selected, isFuture: isFuture)
-    }
-
-    var colors: [Color] {
-        switch palette {
-        case "ocean": [Color(red: 0.18, green: 0.54, blue: 0.72), Color(red: 0.11, green: 0.27, blue: 0.52)]
-        case "violet": [Color(red: 0.65, green: 0.48, blue: 0.86), Color(red: 0.35, green: 0.25, blue: 0.57)]
-        case "forest": [Color(red: 0.30, green: 0.62, blue: 0.50), Color(red: 0.11, green: 0.37, blue: 0.39)]
-        case "sand": [Color(red: 0.91, green: 0.74, blue: 0.52), Color(red: 0.64, green: 0.46, blue: 0.33)]
-        default: [Color(red: 0.94, green: 0.45, blue: 0.36), Color(red: 0.64, green: 0.23, blue: 0.43)]
-        }
-    }
-
-    var backgroundColor: Color? {
-        guard let backgroundColorHex,
-              let rgb = UInt64(backgroundColorHex, radix: 16) else { return nil }
-        return Color(.sRGB, red: Double((rgb >> 16) & 255) / 255,
-                     green: Double((rgb >> 8) & 255) / 255,
-                     blue: Double(rgb & 255) / 255, opacity: 1)
-    }
-
-    var dateLabel: String {
-        let value = date.date()
-        let result = value.formatted(.dateTime.day().month(.wide).year())
-        return date.hour == nil ? result : result + " · " + value.formatted(.dateTime.hour().minute())
-    }
-
     var maskColor: Color {
-        if let maskColorHex, let rgb = UInt64(maskColorHex, radix: 16) {
-            return Color(.sRGB,
-                         red: Double((rgb >> 16) & 0xff) / 255,
-                         green: Double((rgb >> 8) & 0xff) / 255,
-                         blue: Double(rgb & 0xff) / 255,
-                         opacity: 1)
-        }
+        if let maskColorHex { return Color(rgbHex: maskColorHex) }
         switch mask {
-        case "navy": return Color(red: 0.08, green: 0.16, blue: 0.34)
-        case "plum": return Color(red: 0.33, green: 0.12, blue: 0.29)
-        case "brown": return Color(red: 0.28, green: 0.16, blue: 0.10)
+        case "navy": return Color(rgbHex: "142957")
+        case "plum": return Color(rgbHex: "541F4A")
+        case "brown": return Color(rgbHex: "47291A")
         default: return .black
         }
     }
+
+    static func colors(_ palette: String) -> [Color] {
+        switch palette {
+        case "ocean": [Color(red: 0.18, green: 0.54, blue: 0.72),
+                       Color(red: 0.11, green: 0.27, blue: 0.52)]
+        case "violet": [Color(red: 0.65, green: 0.48, blue: 0.86),
+                        Color(red: 0.35, green: 0.25, blue: 0.57)]
+        case "forest": [Color(red: 0.30, green: 0.62, blue: 0.50),
+                        Color(red: 0.11, green: 0.37, blue: 0.39)]
+        case "sand": [Color(red: 0.91, green: 0.74, blue: 0.52),
+                      Color(red: 0.64, green: 0.46, blue: 0.33)]
+        default: [Color(red: 0.94, green: 0.45, blue: 0.36),
+                  Color(red: 0.64, green: 0.23, blue: 0.43)]
+        }
+    }
+
+    func isNow(at now: Date, calendar: Calendar = .current) -> Bool {
+        guard countsUp != true else { return false }
+        let target = date.date(in: calendar)
+        return now >= target && calendar.isDate(now, inSameDayAs: target)
+    }
+
+    func readings(at now: Date, selectedUnits: WidgetUnits? = nil,
+                  calendar: Calendar = .current) -> [WidgetReading] {
+        if isNow(at: now, calendar: calendar) { return [] }
+        let units = selectedUnits ?? displayUnits ?? .legacy(unit)
+        let target = date.date(in: calendar)
+        if countsUp == true && now < target {
+            let requested = units.automatic ? ["minutes"] : units.selected
+            return requested.map { WidgetReading(number: 0, unit: $0, isFuture: false) }
+        }
+        let isFuture = countsUp != true && now < target
+        let elapsed = countsUp == true ? max(0, now.timeIntervalSince(target))
+                                        : abs(target.timeIntervalSince(now))
+
+        if units.automatic {
+            let mode = !isFuture || elapsed >= 86400 ? "days"
+                       : elapsed >= 3600 ? "hours" : "minutes"
+            return [reading(for: mode, at: now, calendar: calendar)]
+        }
+
+        let keys = units.selected
+        let from = min(now, target)
+        let to = max(now, target)
+        let components = calendar.dateComponents([.day, .hour, .minute], from: from, to: to)
+        let calendarDays = abs(calendar.dateComponents([.day],
+            from: calendar.startOfDay(for: now),
+            to: calendar.startOfDay(for: target)).day ?? 0)
+        let minutes = Int(isFuture ? ceil(elapsed / 60) : floor(elapsed / 60))
+        let hours = Int(isFuture ? ceil(elapsed / 3600) : floor(elapsed / 3600))
+
+        return keys.map { key in
+            let number: Int
+            switch key {
+            case "days":
+                number = keys.count == 1 ? calendarDays : (components.day ?? 0)
+            case "hours":
+                number = units.days ? (components.hour ?? 0)
+                    : (keys.count == 1 ? hours : minutes / 60)
+            default:
+                number = units.days
+                    ? (components.minute ?? 0) + (units.hours ? 0 : (components.hour ?? 0) * 60)
+                    : (units.hours ? minutes % 60 : minutes)
+            }
+            return WidgetReading(number: max(0, number), unit: key, isFuture: isFuture)
+        }
+    }
+
+    private func reading(for unit: String, at now: Date, calendar: Calendar) -> WidgetReading {
+        let target = date.date(in: calendar)
+        let isFuture = countsUp != true && now < target
+        let elapsed = countsUp == true ? max(0, now.timeIntervalSince(target))
+                                        : abs(target.timeIntervalSince(now))
+        let result: Int
+        switch unit {
+        case "hours": result = Int(isFuture ? ceil(elapsed / 3600) : floor(elapsed / 3600))
+        case "minutes": result = Int(isFuture ? ceil(elapsed / 60) : floor(elapsed / 60))
+        default:
+            result = abs(calendar.dateComponents([.day],
+                from: calendar.startOfDay(for: now),
+                to: calendar.startOfDay(for: target)).day ?? 0)
+        }
+        return WidgetReading(number: result, unit: unit, isFuture: isFuture)
+    }
+}
+
+private struct WidgetPresetData: Decodable {
+    let id: UUID
+    let eventID: UUID
+    let title: String
+    let size: String
+    let style: WidgetCardStyle
+    let units: WidgetUnits
+    let palette: String
+    let backgroundColorHex: String?
+    let maskColorHex: String
+    let maskOpacity: Double
+    let photoFilename: String?
+    let useEventPhoto: Bool
 }
 
 private struct WidgetReading {
     let number: Int
     let unit: String
     let isFuture: Bool
-
-    var direction: String { isFuture ? "Осталось" : "Прошло" }
-
+    var direction: String { isFuture ? "ОСТАЛОСЬ" : "ПРОШЛО" }
     var label: String {
         let n = abs(number)
         func ending(_ one: String, _ few: String, _ many: String) -> String {
@@ -202,14 +272,11 @@ private struct WidgetReading {
     }
 }
 
-// Each widget can pick a different event using Edit Widget → Событие.
 struct WidgetEventOption: AppEntity, Identifiable {
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Событие"
     static var defaultQuery = WidgetEventQuery()
-
     let id: String
     let title: String
-
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(title: LocalizedStringResource(stringLiteral: title))
     }
@@ -217,134 +284,169 @@ struct WidgetEventOption: AppEntity, Identifiable {
 
 struct WidgetEventQuery: EntityQuery {
     func entities(for identifiers: [WidgetEventOption.ID]) async throws -> [WidgetEventOption] {
-        SharedEvents.all()
-            .filter { identifiers.contains($0.id.uuidString) }
+        SharedData.events().filter { identifiers.contains($0.id.uuidString) }
             .map { WidgetEventOption(id: $0.id.uuidString, title: $0.title) }
     }
-
     func suggestedEntities() async throws -> [WidgetEventOption] {
-        SharedEvents.all()
-            .map { WidgetEventOption(id: $0.id.uuidString, title: $0.title) }
+        SharedData.events().map { WidgetEventOption(id: $0.id.uuidString, title: $0.title) }
     }
-
     func defaultResult() async -> WidgetEventOption? {
-        guard let first = SharedEvents.all().first else { return nil }
-        return WidgetEventOption(id: first.id.uuidString, title: first.title)
+        SharedData.events().first.map { WidgetEventOption(id: $0.id.uuidString, title: $0.title) }
+    }
+}
+
+struct WidgetPresetOption: AppEntity, Identifiable {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Оформление"
+    static var defaultQuery = WidgetPresetQuery()
+    let id: String
+    let title: String
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: LocalizedStringResource(stringLiteral: title))
+    }
+}
+
+struct WidgetPresetQuery: EntityQuery {
+    func entities(for identifiers: [WidgetPresetOption.ID]) async throws -> [WidgetPresetOption] {
+        SharedData.presets().filter { identifiers.contains($0.id.uuidString) }
+            .map { WidgetPresetOption(id: $0.id.uuidString, title: $0.title) }
+    }
+    func suggestedEntities() async throws -> [WidgetPresetOption] {
+        SharedData.presets().map { WidgetPresetOption(id: $0.id.uuidString, title: $0.title) }
+    }
+    func defaultResult() async -> WidgetPresetOption? {
+        // Keep the preset optional until the user explicitly picks one.
+        nil
     }
 }
 
 struct SelectCountEventIntent: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "Выбрать событие"
-    static var description = IntentDescription("Какое событие показывать на этом виджете")
-
-    @Parameter(title: "Событие", description: "Оставьте пустым для ближайшего события")
+    static var title: LocalizedStringResource = "Дни"
+    static var description = IntentDescription("Выберите событие или своё оформление")
+    @Parameter(title: "Оформление")
+    var preset: WidgetPresetOption?
+    @Parameter(title: "Событие")
     var event: WidgetEventOption?
-
     init() {}
 }
 
 private struct CountEntry: TimelineEntry {
     let date: Date
     let event: WidgetEvent?
-    let reading: WidgetReading
+    let preset: WidgetPresetData?
+    let readings: [WidgetReading]
+    let isNow: Bool
 }
 
 private struct CountProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> CountEntry {
-        CountEntry(date: .now, event: nil,
-                   reading: WidgetReading(number: 42, unit: "days", isFuture: true))
+        CountEntry(date: .now, event: nil, preset: nil,
+                   readings: [WidgetReading(number: 42, unit: "days", isFuture: true)],
+                   isNow: false)
     }
-
     func snapshot(for configuration: SelectCountEventIntent, in context: Context) async -> CountEntry {
-        makeEntry(at: .now, configuration: configuration)
+        entry(at: .now, configuration: configuration)
     }
-
     func timeline(for configuration: SelectCountEventIntent, in context: Context) async -> Timeline<CountEntry> {
         let now = Date()
-        let entry = makeEntry(at: now, configuration: configuration)
+        let current = entry(at: now, configuration: configuration)
         let calendar = Calendar.current
-        let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+        let midnight = calendar.date(byAdding: .day, value: 1,
+                                     to: calendar.startOfDay(for: now))
             ?? now.addingTimeInterval(86_400)
-        var next = midnight.addingTimeInterval(10)
 
-        if let event = entry.event {
-            let seconds = event.date.date(in: calendar).timeIntervalSince(now)
-            if seconds > 0 {
-                if (event.unit ?? "automatic") == "automatic" {
-                    for threshold in [86_400.0, 3_600.0] {
-                        if seconds > threshold {
-                            let transition = now.addingTimeInterval(seconds - threshold + 1)
-                            next = min(next, transition)
-                        }
+        // Timeline entries (not just a refresh request) make the "СЕЙЧАС"
+        // transition available when the app is closed.
+        var changes: [Date] = [midnight.addingTimeInterval(1)]
+        if let event = current.event {
+            let target = event.date.date(in: calendar)
+            let remaining = target.timeIntervalSince(now)
+            if remaining > 0 {
+                for threshold in [86_400.0, 3_600.0] where remaining > threshold {
+                    let transition = target.addingTimeInterval(-threshold)
+                    if transition > now && transition < midnight {
+                        changes.append(transition)
                     }
                 }
-                if entry.reading.unit == "minutes" {
-                    next = min(next, now.addingTimeInterval(60))
-                } else if entry.reading.unit == "hours" {
-                    next = min(next, now.addingTimeInterval(300))
+                if target < midnight {
+                    changes.append(target.addingTimeInterval(1))
                 }
-                next = min(next, event.date.date(in: calendar).addingTimeInterval(2))
+            }
+
+            let unit = current.readings.first?.unit ?? "days"
+            let needsMinuteUpdates = unit == "minutes" ||
+                (current.readings.contains { $0.unit == "minutes" })
+            let needsHourUpdates = unit == "hours" ||
+                (current.readings.contains { $0.unit == "hours" })
+            let interval: TimeInterval = needsMinuteUpdates ? 60 : (needsHourUpdates ? 300 : 0)
+            if interval > 0 {
+                for step in 1...12 {
+                    let date = now.addingTimeInterval(interval * Double(step))
+                    if date < midnight && date < now.addingTimeInterval(3_600) {
+                        changes.append(date)
+                    }
+                }
             }
         }
-        if let event = entry.event, event.countsUp == true {
-            // Refresh elapsed counters too, not just countdowns.
-            if entry.reading.unit == "minutes" {
-                next = min(next, now.addingTimeInterval(60))
-            } else if entry.reading.unit == "hours" {
-                next = min(next, now.addingTimeInterval(300))
-            }
-            let elapsed = now.timeIntervalSince(event.date.date())
-            for threshold in [3_600.0, 86_400.0] where elapsed < threshold {
-                next = min(next, now.addingTimeInterval(threshold - elapsed + 1))
-            }
-        }
-        return Timeline(entries: [entry], policy: .after(max(now.addingTimeInterval(30), next)))
+        let entries = [current] + changes
+            .filter { $0 > now.addingTimeInterval(0.5) }
+            .sorted()
+            .map { entry(at: $0, configuration: configuration) }
+        return Timeline(entries: entries,
+                        policy: .after((entries.last?.date ?? now).addingTimeInterval(60)))
     }
 
-    private func makeEntry(at now: Date, configuration: SelectCountEventIntent) -> CountEntry {
-        let events = SharedEvents.all()
-        let selected: WidgetEvent?
-        if let id = configuration.event?.id, let chosen = events.first(where: { $0.id.uuidString == id }) {
-            selected = chosen
+    private func entry(at now: Date, configuration: SelectCountEventIntent) -> CountEntry {
+        let events = SharedData.events()
+        let presets = SharedData.presets()
+        let preset = presets.first { $0.id.uuidString == configuration.preset?.id }
+        let chosen: WidgetEvent?
+        if let preset {
+            chosen = events.first { $0.id == preset.eventID }
+        } else if let eventID = configuration.event?.id {
+            chosen = events.first { $0.id.uuidString == eventID }
         } else {
-            let future = events.filter { $0.date.date() >= now }
-                .sorted { $0.date.date() < $1.date.date() }
-            let past = events.filter { $0.date.date() < now }
-                .sorted { $0.date.date() > $1.date.date() }
-            selected = (future + past).first
+            chosen = events.filter { $0.date.date() >= now }
+                .sorted { $0.date.date() < $1.date.date() }.first
+                ?? events.sorted { $0.date.date() > $1.date.date() }.first
         }
-        return CountEntry(date: now, event: selected,
-                          reading: selected?.reading(now: now)
-                            ?? WidgetReading(number: 0, unit: "days", isFuture: true))
+        return CountEntry(date: now, event: chosen, preset: preset,
+                          readings: chosen?.readings(at: now, selectedUnits: preset?.units)
+                              ?? [WidgetReading(number: 0, unit: "days", isFuture: true)],
+                          isNow: chosen?.isNow(at: now) ?? false)
     }
 }
 
 private struct WidgetBackground: View {
-    let event: WidgetEvent?
+    let entry: CountEntry
 
     var body: some View {
         GeometryReader { proxy in
-            if let event,
-               let image = SharedEvents.photo(named: event.photoFilename) {
+            let preset = entry.preset
+            let event = entry.event
+            let filename = preset?.photoFilename ??
+                ((preset?.useEventPhoto ?? true) ? event?.photoFilename : nil)
+            if let image = SharedData.photo(named: filename) {
                 let scale = max(proxy.size.width / max(image.size.width, 1),
                                 proxy.size.height / max(image.size.height, 1))
-                    * CGFloat(min(max(event.photoZoom ?? 1, 1), 2.5))
+                    * CGFloat(min(max(event?.photoZoom ?? 1, 1), 2.5))
                 let width = image.size.width * scale
                 let height = image.size.height * scale
-                let x = (width - proxy.size.width) * CGFloat(0.5 - (event.photoFocusX ?? 0.5))
-                let y = (height - proxy.size.height) * CGFloat(0.5 - (event.photoFocusY ?? 0.5))
+                let offsetX = (width - proxy.size.width) * CGFloat(0.5 - (event?.photoFocusX ?? 0.5))
+                let offsetY = (height - proxy.size.height) * CGFloat(0.5 - (event?.photoFocusY ?? 0.5))
                 Image(uiImage: image)
                     .resizable()
-                    .interpolation(.high)
                     .frame(width: width, height: height)
-                    .position(x: proxy.size.width / 2 + x, y: proxy.size.height / 2 + y)
+                    .position(x: proxy.size.width / 2 + offsetX,
+                              y: proxy.size.height / 2 + offsetY)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
-                    .overlay(event.maskColor.opacity(min(max(event.maskOpacity ?? 0.55, 0), 0.9)))
-            } else if let color = event?.backgroundColor {
-                color
+                    .overlay(Color(rgbHex: preset?.maskColorHex ??
+                                   event?.maskColorHex ?? "000000")
+                        .opacity(min(max(preset?.maskOpacity ?? event?.maskOpacity ?? 0.55, 0), 0.9)))
+            } else if let hex = preset?.backgroundColorHex ?? event?.backgroundColorHex {
+                Color(rgbHex: hex)
             } else {
-                LinearGradient(colors: event?.colors ?? [.indigo, .purple],
+                LinearGradient(colors: WidgetEvent.colors(preset?.palette ?? event?.palette ?? "coral"),
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             }
         }
@@ -353,135 +455,162 @@ private struct WidgetBackground: View {
 
 private struct CountWidgetFace: View {
     @Environment(\.widgetFamily) private var family
-    @Environment(\.widgetRenderingMode) private var renderingMode
     let entry: CountEntry
 
-    private var style: WidgetCardStyle { entry.event?.style ?? .standard }
-
-    private var numberSize: CGFloat {
-        (family == .systemMedium ? 112 : 91) * CGFloat(min(max(style.scale, 0.7), 1.6))
-    }
-
-    private var numberText: some View {
-        Text(entry.reading.number, format: .number)
-            .font(.system(size: numberSize, weight: style.weight, design: style.design))
-            .tracking(-3)
-            .lineLimit(1)
-            .minimumScaleFactor(0.3)
-            .monospacedDigit()
-    }
-
-    private var unitText: some View {
-        Text(entry.reading.label)
-            .font(.system(size: 13, weight: .semibold, design: .rounded))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
+    private var style: WidgetCardStyle { entry.preset?.style ?? entry.event?.style ?? .standard }
+    private var title: String { entry.event?.title ?? "Создай событие" }
+    private var values: [WidgetReading] {
+        family == .systemSmall ? Array(entry.readings.prefix(1)) : entry.readings
     }
 
     var body: some View {
         Group {
             switch family {
             case .accessoryInline:
-                Text("\(entry.event?.title ?? "Дни") · \(entry.reading.number) \(entry.reading.label)")
+                Text(entry.isNow ? "\(title) · СЕЙЧАС"
+                     : "\(title) · \(entry.readings.first?.number ?? 0) \(entry.readings.first?.label ?? "дней")")
                     .lineLimit(1)
             case .accessoryCircular:
                 VStack(spacing: 0) {
-                    Text(entry.reading.number, format: .number)
-                        .font(.system(size: 30, weight: .bold, design: .serif))
-                        .minimumScaleFactor(0.4)
-                        .lineLimit(1)
-                    Text(entry.reading.unit == "days" ? "ДНЕЙ" : entry.reading.unit == "hours" ? "ЧАСОВ" : "МИН")
-                        .font(.system(size: 9, weight: .bold))
+                    if entry.isNow {
+                        Image(systemName: "sparkles")
+                        Text("СЕЙЧАС").font(.system(size: 9, weight: .heavy))
+                    } else {
+                        Text(entry.readings.first?.number ?? 0, format: .number)
+                            .font(.system(size: 30, weight: style.weight, design: style.design))
+                            .minimumScaleFactor(0.4)
+                            .lineLimit(1)
+                        Text(entry.readings.first?.label ?? "дней")
+                            .font(.system(size: 9, weight: .bold))
+                    }
                 }
             case .accessoryRectangular:
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(entry.event?.title ?? "Добавь событие")
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(entry.reading.number, format: .number)
-                            .font(.system(size: 34, weight: .bold, design: .serif))
-                        Text(entry.reading.label)
-                            .font(.caption.weight(.medium))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.caption.weight(.semibold)).lineLimit(1)
+                    if entry.isNow {
+                        Text("СЕЙЧАС").font(.system(size: 23, weight: .bold))
+                    } else {
+                        Text(entry.readings.first?.number ?? 0, format: .number)
+                            .font(.system(size: 33, weight: style.weight, design: style.design))
                     }
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    Text(entry.reading.direction.uppercased())
-                        .font(.system(size: 9, weight: .heavy))
+                    Text(entry.readings.first?.label ?? "дней").font(.caption)
                 }
+            case .systemLarge:
+                VStack(alignment: .leading, spacing: 15) {
+                    header
+                    Spacer(minLength: 0)
+                    readingsRow(fontSize: 60)
+                    Text(title)
+                        .font(.system(size: 24 * style.scaleValue,
+                                      weight: style.weight, design: style.design))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.4)
+                    Text(entry.event?.date.label ?? "")
+                        .font(.caption)
+                        .opacity(0.85)
+                    Rectangle().fill(style.color.opacity(0.35)).frame(height: 1)
+                    Text(entry.event?.note?.isEmpty == false ? entry.event?.note ?? "" :
+                         "Заметка к событию")
+                        .font(.system(size: 13))
+                        .lineLimit(5)
+                }
+                .foregroundStyle(style.color)
+                .padding(4)
             case .systemMedium:
-                HStack(alignment: .center, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(entry.reading.direction.uppercased())
-                            .font(.system(size: 10, weight: .heavy, design: .rounded))
-                            .tracking(1.4)
-                        Text(entry.event?.title ?? "Создай событие")
-                            .font(.system(size: 21, weight: style.weight, design: style.design))
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        header
+                        Text(title)
+                            .font(.system(size: 20 * style.scaleValue,
+                                          weight: style.weight, design: style.design))
                             .lineLimit(2)
-                        if let dateLabel = entry.event?.dateLabel {
-                            Text(dateLabel)
-                                .font(.caption.weight(.medium))
-                                .opacity(0.85)
-                        }
+                            .minimumScaleFactor(0.4)
+                        Text(entry.event?.date.label ?? "")
+                            .font(.caption2)
+                            .lineLimit(2)
+                            .opacity(0.85)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text(entry.reading.number, format: .number)
-                            .font(.system(size: 76 * CGFloat(min(max(style.scale, 0.7), 1.6)),
-                                          weight: style.weight, design: style.design))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.3)
-                        Text(entry.reading.label)
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    readingsRow(fontSize: values.count > 1 ? 34 : 74)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .foregroundStyle(style.color)
                 .padding(2)
             default:
-                VStack(alignment: style.centered ? .center : .leading, spacing: 5) {
-                    Text(entry.reading.direction.uppercased())
-                        .font(.system(size: 10, weight: .heavy, design: .rounded))
-                        .tracking(1)
+                VStack(alignment: .leading, spacing: 5) {
+                    header
                     Spacer(minLength: 0)
-                    Text(entry.reading.number, format: .number)
-                        .font(.system(size: 74 * CGFloat(min(max(style.scale, 0.7), 1.6)),
+                    readingsRow(fontSize: 77)
+                    Text(title)
+                        .font(.system(size: 16 * style.scaleValue,
                                       weight: style.weight, design: style.design))
-                        .monospacedDigit()
                         .lineLimit(1)
-                        .minimumScaleFactor(0.3)
-                    Text(entry.reading.label)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                    Text(entry.event?.title ?? "Создай событие")
-                        .font(.system(size: 15, weight: style.weight, design: style.design))
-                        .lineLimit(1)
+                        .minimumScaleFactor(0.4)
                 }
-                .frame(maxWidth: .infinity, alignment: style.centered ? .center : .leading)
                 .foregroundStyle(style.color)
                 .padding(2)
             }
         }
-        .containerBackground(for: .widget) {
-            WidgetBackground(event: entry.event)
+        .containerBackground(for: .widget) { WidgetBackground(entry: entry) }
+        .widgetURL(
+            entry.preset.flatMap { URL(string: "dni://widget/\($0.id.uuidString)") } ??
+            entry.event.flatMap { URL(string: "dni://event/\($0.id.uuidString)") }
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private var header: some View {
+        Text(entry.isNow ? "ЭТОТ ДЕНЬ НАСТАЛ" :
+             entry.event?.countsUp == true || entry.readings.first?.isFuture == false
+                ? "ПРОШЛО" : "ОСТАЛОСЬ")
+            .font(.system(size: 10, weight: .heavy, design: .rounded))
+            .tracking(1)
+    }
+
+    @ViewBuilder
+    private func readingsRow(fontSize: CGFloat) -> some View {
+        if entry.isNow {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .symbolEffect(.bounce)
+                Text("СЕЙЧАС")
+                    .font(.system(size: min(fontSize * style.scaleValue * 0.72, 54),
+                                  weight: style.weight, design: style.design))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.3)
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                ForEach(values.indices, id: \.self) { i in
+                    let reading = values[i]
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(reading.number, format: .number)
+                            .font(.system(size: fontSize * style.scaleValue,
+                                          weight: style.weight, design: style.design))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.3)
+                        Text(reading.label)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(entry.event?.title ?? "Дни"). \(entry.reading.direction): \(entry.reading.number) \(entry.reading.label)")
     }
 }
 
 struct CountDownWidget: Widget {
     let kind = "CountDownWidget"
-
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: SelectCountEventIntent.self,
                                provider: CountProvider()) { entry in
             CountWidgetFace(entry: entry)
         }
         .configurationDisplayName("Дни")
-        .description("Выберите событие для каждого виджета")
-        .supportedFamilies([.systemSmall, .systemMedium,
+        .description("Выберите событие или сохранённое оформление")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
                             .accessoryInline, .accessoryCircular, .accessoryRectangular])
     }
 }

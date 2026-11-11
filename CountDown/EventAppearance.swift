@@ -123,43 +123,81 @@ struct EventNumber: View {
     let large: Bool
     var style: CardStyle = CardStyle()
 
-    private var numberSize: CGFloat {
-        (large ? (reading.isFuture ? 72 : 86) : 62) * CGFloat(min(max(style.scale, 0.7), 1.6))
+    private var size: CGFloat {
+        (large ? 84 : 65) * CGFloat(min(max(style.scale, 0.7), 1.6))
     }
 
     var body: some View {
-        Group {
-            if style.unitPlacement == .beside {
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    numberText
-                    unitText
-                }
-            } else {
-                VStack(alignment: style.horizontalAlignment, spacing: -4) {
-                    numberText
-                    unitText
-                }
-            }
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(reading.number, format: .number)
+                .font(.system(size: size, weight: style.thickness.fontWeight,
+                              design: style.typeface.fontDesign))
+                .monospacedDigit()
+                .tracking(-2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.45)
+                .contentTransition(.numericText())
+            Text(reading.unitLabel)
+                .font(.system(size: large ? 18 : 15, weight: .semibold, design: .rounded))
+                .lineLimit(1)
         }
         .foregroundStyle(style.textColor)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(reading.number) \(reading.unitLabel)")
     }
+}
 
-    private var numberText: some View {
-        Text(reading.number, format: .number)
-            .font(.system(size: numberSize, weight: style.thickness.fontWeight, design: style.typeface.fontDesign))
-            .tracking(-2)
-            .monospacedDigit()
-            .lineLimit(1)
-            .minimumScaleFactor(0.35)
-            .contentTransition(.numericText())
-    }
+struct EventTimeDisplay: View {
+    let event: CountEvent
+    let now: Date
+    let large: Bool
 
-    private var unitText: some View {
-        Text(reading.unitLabel)
-            .font(.system(size: large ? 17 : 14, weight: .semibold, design: .rounded))
-            .lineLimit(1)
+    private var phase: EventPhase { DayCount.phase(for: event, now: now) }
+    private var readings: [CountReading] { DayCount.readings(for: event, now: now) }
+    private var scale: CGFloat { CGFloat(min(max(event.style.scale, 0.7), 1.6)) }
+
+    var body: some View {
+        Group {
+            if phase == .now {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: large ? 28 : 22))
+                        .symbolEffect(.bounce, value: phase)
+                    Text("СЕЙЧАС")
+                        .font(.system(size: (large ? 64 : 48) * scale,
+                                      weight: event.style.thickness.fontWeight,
+                                      design: event.style.typeface.fontDesign))
+                        .tracking(-1.7)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+                .shadow(color: event.style.textColor.opacity(0.3), radius: 15)
+            } else if readings.count == 1, let reading = readings.first {
+                EventNumber(reading: reading, large: large, style: event.style)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: large ? 20 : 9) {
+                    ForEach(readings.indices, id: \.self) { index in
+                        let reading = readings[index]
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(reading.number, format: .number)
+                                .font(.system(size: (large ? 49 : 40) * scale,
+                                              weight: event.style.thickness.fontWeight,
+                                              design: event.style.typeface.fontDesign))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.45)
+                            Text(reading.unitLabel)
+                                .font(.system(size: large ? 14 : 12, weight: .semibold,
+                                              design: .rounded))
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .foregroundStyle(event.style.textColor)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -168,46 +206,59 @@ struct EventCard: View {
     let now: Date
     var previewImage: UIImage? = nil
 
-    private var reading: CountReading { DayCount.reading(for: event, now: now) }
+    private var phase: EventPhase { DayCount.phase(for: event, now: now) }
+    private var isNow: Bool { phase == .now }
+    private var scale: CGFloat { CGFloat(min(max(event.style.scale, 0.7), 1.6)) }
 
     var body: some View {
-        VStack(alignment: event.style.horizontalAlignment, spacing: 7) {
-            HStack(alignment: .center) {
-                Image(systemName: event.symbol)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Image(systemName: isNow ? "sparkles" : event.symbol)
                     .font(.subheadline.weight(.bold))
-                Text(reading.direction.uppercased())
+                Text(isNow ? "ЭТОТ ДЕНЬ НАСТАЛ" :
+                     event.countsUp || event.date.date() < now ? "ПРОШЛО" : "ОСТАЛОСЬ")
                     .font(.system(size: 10, weight: .heavy, design: .rounded))
-                    .tracking(1.8)
-                Spacer()
+                    .tracking(1.6)
+                Spacer(minLength: 0)
                 if event.isPinned {
                     Image(systemName: "pin.fill")
                         .font(.subheadline)
-                        .accessibilityLabel("Закреплённое событие")
+                        .accessibilityLabel("Закреплено")
                 }
             }
-            Spacer(minLength: 2)
-            EventNumber(reading: reading, large: false, style: event.style)
+            Spacer(minLength: 6)
+            EventTimeDisplay(event: event, now: now, large: false)
                 .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
-            HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: event.style.horizontalAlignment, spacing: 3) {
                 Text(event.title)
-                    .font(.system(size: 20 * CGFloat(min(max(event.style.scale, 0.7), 1.6)),
-                                  weight: event.style.thickness.fontWeight,
+                    .font(.system(size: 20 * scale, weight: event.style.thickness.fontWeight,
                                   design: event.style.typeface.fontDesign))
                     .lineLimit(1)
-                Spacer()
+                    .minimumScaleFactor(0.45)
+                    .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
                 Text(event.date.displayLabel)
-                    .font(.caption.weight(.medium))
-                    .opacity(0.85)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
             }
+            .layoutPriority(1)
         }
         .foregroundStyle(event.style.textColor)
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 176)
+        .padding(19)
+        .frame(maxWidth: .infinity, minHeight: 178 + max(0, scale - 1) * 74 + (isNow ? 20 : 0),
+               alignment: .leading)
         .background { EventBackground(event: event, previewImage: previewImage) }
+        .overlay {
+            if isNow {
+                RoundedRectangle(cornerRadius: 25, style: .continuous)
+                    .strokeBorder(event.style.textColor.opacity(0.55), lineWidth: 1.5)
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(event.title). \(reading.direction), \(reading.number) \(reading.unitLabel).")
-        .accessibilityHint("Нажмите, чтобы открыть заметку. Смахните влево для редактирования.")
+        .animation(.spring(response: 0.7, dampingFraction: 0.7), value: isNow)
+        .animation(.easeInOut(duration: 0.25), value: event.style.scale)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Нажмите для заметки; удерживайте для перемещения")
     }
 }

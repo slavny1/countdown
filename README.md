@@ -82,3 +82,29 @@ Existing signing, App Group and Copy only when installing build settings were le
 8. Verify reset is only available for elapsed-time events and appears after all event details.
 
 This branch is based on feat/widget-photo-preview-reset, leaving main and prior feature branches unchanged. No project signing or widget-embedding settings were modified here.
+
+## Animated notes and independent widget presets (draft)
+
+The feature branch feat/animated-cards-widget-presets adds:
+
+- A continuous rounded card-and-note container. Notes expand below the card with a spring animation and a limited-height internal scroll view. Long-press drag-and-drop uses a spring transition; pinned cards remain in their section, and pin state survives editing.
+- A celebratory state **СЕЙЧАС** starting when the target time is reached on the event's calendar date. The card grows and highlights this state; elapsed counting resumes on the next day. WidgetKit timelines include event-time and midnight entries, subject to iOS scheduling.
+- Event limits: 70 characters for title, 300 for note.
+- Automatic days/hours/minutes counting or any explicitly selected combination; a single unit shows the full total.
+- Card typography scales the number and title, with five default text colors plus reusable custom swatches.
+- An **in-app widget gallery** under Event → Виджеты, with a plus alongside the small preview. Every saved widget configuration has its own UUID, title, intended size S/M/L, typography, time units, optional dedicated photo, palette, mask color and opacity. Initially inherited event styling remains independent once customized.
+- Small widgets show one metric, medium show up to three, large may additionally show the event note. Saved presets appear in WidgetKit's Edit Widget → Оформление. Tapping a preset-backed widget uses the dni URL scheme to open that preset's editor.
+- **iOS limitation:** applications cannot place a Home Screen widget automatically. Plus creates a configuration. To add it: long-press Home Screen → Add Widget → Дни → choose size, then long-press placed widget → Edit Widget → Оформление.
+
+### iPhone QA required before merging
+
+1. Build app and extension in Xcode and run unit tests; changes committed via GitHub have not been compiled or device-tested.
+2. Expand and collapse notes; check animation, scroll, rounded corners.
+3. Drag/reorder; pin a bottom card, check there is no blackout; edit pinned card and ensure pin persists.
+4. Test target time crossing to СЕЙЧАС and following calendar day; check in-app and WidgetKit.
+5. Test composite and single-unit totals, text limits and type size beyond 100%.
+6. Create two presets for one event with different styles; add real small/medium/large widgets and verify preset selection.
+7. Tap configured widget and check deep-link opens its editor; test standard and tinted modes.
+8. Open an older saved event and verify retained values.
+
+Previous feature branches and main are unchanged. Developer team, App Group and existing Embed App Extensions configuration are untouched. Main app Info.plist source registration was added only for the deep link.

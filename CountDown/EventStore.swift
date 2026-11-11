@@ -4,6 +4,7 @@ import WidgetKit
 @MainActor
 final class EventStore: ObservableObject {
     @Published private(set) var events: [CountEvent] = EventRepository.load()
+    @Published private(set) var widgetPresets: [WidgetPreset] = WidgetPresetRepository.load()
 
     func add(_ event: CountEvent) {
         events.append(event)
@@ -22,24 +23,70 @@ final class EventStore: ObservableObject {
         persist()
     }
 
-    func move(_ draggedID: UUID, before targetID: UUID) {
+    func move(_ draggedID: UUID, before targetID: UUID, persist shouldPersist: Bool = true) {
         guard draggedID != targetID,
-              let from = events.firstIndex(where: { $0.id == draggedID }),
-              let destination = events.firstIndex(where: { $0.id == targetID }) else { return }
-        var reordered = events
-        var moved = reordered.remove(at: from)
-        let target = reordered.first(where: { $0.id == targetID })!
-        moved.isPinned = target.isPinned
-        if let to = reordered.firstIndex(where: { $0.id == targetID }) {
-            reordered.insert(moved, at: to)
-        }
-        events = reordered
+              let source = events.firstIndex(where: { $0.id == draggedID }),
+              let target = events.firstIndex(where: { $0.id == targetID }),
+              events[source].isPinned == events[target].isPinned else { return }
+        let movingDown = source < target
+        let moved = events.remove(at: source)
+        guard let destination = events.firstIndex(where: { $0.id == targetID }) else { return }
+        events.insert(moved, at: movingDown ? destination + 1 : destination)
+        if shouldPersist { persist() }
+    }
+
+    func finishReordering() {
         persist()
+    }
+
+    /// Reorder inside the current pin group. The index is computed from the
+    /// destination gap among all peers excluding the lifted event.
+    func reorder(_ eventID: UUID, toGroupIndex index: Int) {
+        guard let source = events.firstIndex(where: { $0.id == eventID }) else { return }
+        let moved = events.remove(at: source)
+        let group = events.enumerated().filter { $0.element.isPinned == moved.isPinned }
+        let insertion = max(0, min(index, group.count))
+        let destination: Int
+        if insertion < group.count {
+            destination = group[insertion].offset
+        } else if let last = group.last {
+            destination = last.offset + 1
+        } else {
+            destination = moved.isPinned ? 0 : events.count
+        }
+        events.insert(moved, at: min(destination, events.count))
+        persist()
+    }
+
+    func addPreset(_ preset: WidgetPreset) {
+        widgetPresets.append(preset)
+        persistPresets()
+    }
+
+    func updatePreset(_ preset: WidgetPreset) {
+        guard let index = widgetPresets.firstIndex(where: { $0.id == preset.id }) else { return }
+        widgetPresets[index] = preset
+        persistPresets()
+    }
+
+    func removePreset(_ preset: WidgetPreset) {
+        widgetPresets.removeAll { $0.id == preset.id }
+        EventPhotoStore.remove(named: preset.photoFilename)
+        persistPresets()
+    }
+
+    private func persistPresets() {
+        _ = WidgetPresetRepository.save(widgetPresets)
+        WidgetCenter.shared.reloadTimelines(ofKind: "CountDownWidget")
     }
 
     func remove(_ event: CountEvent) {
         events.removeAll { $0.id == event.id }
         EventPhotoStore.remove(named: event.photoFilename)
+        let orphaned = widgetPresets.filter { $0.eventID == event.id }
+        orphaned.forEach { EventPhotoStore.remove(named: $0.photoFilename) }
+        widgetPresets.removeAll { $0.eventID == event.id }
+        persistPresets()
         persist()
     }
 
