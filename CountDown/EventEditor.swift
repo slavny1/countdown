@@ -33,7 +33,7 @@ struct EventEditor: View {
     @State private var pendingImage: UIImage?
     @State private var removePhoto = false
     @State private var photoError = false
-    @State private var showingWidgets = false
+    @FocusState private var noteIsFocused: Bool
     @State private var showStyle = false
     @State private var showFonts = false
     @State private var showColors = false
@@ -49,6 +49,7 @@ struct EventEditor: View {
                            "star.fill", "moon.stars.fill", "flag.fill", "party.popper.fill"]
     private let textColors = ["FFFFFF", "1B2029", "F6CF59", "C8E9FF"]
     private let maskColors = ["141414", "142957", "F0E3D1", "FFFFFF"]
+    private let backgroundColors = ["F0E3D1", "1B2029", "5373B9", "E6A681"]
 
     init(event: CountEvent? = nil) {
         existingEvent = event
@@ -129,14 +130,18 @@ struct EventEditor: View {
                     eventFields
                     countFields
                     appearanceFields
-                    widgetFields
                 }
                 .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .navigationTitle(existingEvent == nil ? "Новое событие" : "Изменить событие")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Готово") { noteIsFocused = false }
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Отмена") { dismiss() }
                 }
@@ -166,11 +171,6 @@ struct EventEditor: View {
                     }
                 }
                 .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showingWidgets) {
-                if let event = existingEvent {
-                    WidgetGallery(eventID: event.id).environmentObject(store)
-                }
             }
             .onAppear {
                 customText = UserDefaults.standard.stringArray(forKey: "days.customTextColors") ?? []
@@ -221,6 +221,7 @@ struct EventEditor: View {
                         }
                         TextField("Заметка (необязательно)", text: $note, axis: .vertical)
                             .lineLimit(3...7)
+                            .focused($noteIsFocused)
                             .onChange(of: note) { _, value in
                                 if value.count > 300 { note = String(value.prefix(300)) }
                             }
@@ -352,40 +353,14 @@ struct EventEditor: View {
                                             }
                                         }
                                     }
-                                    Text("Свой цвет фона").font(.subheadline)
-                                    swatchRow([], custom: customBackgrounds,
+                                    Text("Цвет фона").font(.subheadline)
+                                    swatchRow(backgroundColors, custom: customBackgrounds,
                                               selected: backgroundColorHex ?? "", target: .background)
                                 }
                             }
                         }
                     }
 
-    }
-
-    private var widgetFields: some View {
-                    Section("Виджеты") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .center, spacing: 12) {
-                                WidgetCardPreview(event: previewEvent, image: image, wide: false)
-                                    .frame(width: 145, height: 145)
-                                WidgetCardPreview(event: previewEvent, image: image, wide: true)
-                                    .frame(width: 285, height: 145)
-                                WidgetCardPreview(event: previewEvent, image: image, wide: true, large: true)
-                                    .frame(width: 165, height: 245)
-                            }
-                        }
-                        Button {
-                            showingWidgets = true
-                        } label: {
-                            Label("Добавить виджет", systemImage: "plus.circle.fill")
-                        }
-                        .disabled(existingEvent == nil)
-                        if existingEvent == nil {
-                            Text("Сначала сохрани событие, чтобы добавить отдельные оформления виджетов.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
     }
 
     private func toggleUnit(_ unit: CountUnit, title: String) -> some View {
