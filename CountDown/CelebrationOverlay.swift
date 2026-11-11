@@ -1,72 +1,59 @@
 import SwiftUI
 
-/// A lightweight, original fireworks animation rendered only for a milestone
-/// that has reached its scheduled day. No timer or persistent background work.
+/// Celebration stays at normal card size; no duplicate title or extra icon.
+/// The rest of the interface is dimmed until the user dismisses it.
 struct CelebrationOverlay: View {
     let event: CountEvent
     let onDismiss: () -> Void
 
     var body: some View {
         TimelineView(.animation) { clock in
-            ZStack {
-                Color.black.opacity(0.78)
-                    .ignoresSafeArea()
+            GeometryReader { proxy in
+                ZStack {
+                    Color.black.opacity(0.76)
+                        .ignoresSafeArea()
 
-                Canvas { context, size in
-                    let seconds = clock.date.timeIntervalSinceReferenceDate
-                    for burst in 0..<5 {
-                        let phase = (seconds * 0.37 + Double(burst) * 0.21)
-                            .truncatingRemainder(dividingBy: 1)
-                        let center = CGPoint(
-                            x: size.width * (0.20 + Double(burst % 3) * 0.30),
-                            y: size.height * (0.17 + Double(burst / 3) * 0.18)
-                        )
-                        for particle in 0..<22 {
-                            let angle = Double(particle) * (Double.pi * 2 / 22)
-                            let radius = 9 + phase * 118
-                            let x = center.x + cos(angle) * radius
-                            let y = center.y + sin(angle) * radius
-                            let diameter = 2.5 + 3.5 * (1 - phase)
-                            let rect = CGRect(x: x, y: y, width: diameter, height: diameter)
-                            let color = Color(hue: (Double(burst) * 0.17 +
-                                                     Double(particle % 5) * 0.04)
-                                                .truncatingRemainder(dividingBy: 1),
-                                              saturation: 0.72, brightness: 1)
-                                .opacity((1 - phase) * 0.92)
-                            context.fill(Path(ellipseIn: rect), with: .color(color))
+                    Canvas { context, size in
+                        let seconds = clock.date.timeIntervalSinceReferenceDate
+                        for burst in 0..<4 {
+                            let phase = (seconds * 0.40 + Double(burst) * 0.24)
+                                .truncatingRemainder(dividingBy: 1)
+                            let center = CGPoint(
+                                x: size.width * (0.15 + Double(burst % 3) * 0.32),
+                                y: size.height * (0.16 + Double(burst / 3) * 0.20))
+                            for particle in 0..<20 {
+                                let angle = Double(particle) * (Double.pi * 2 / 20)
+                                let radius = 10 + phase * 95
+                                let position = CGRect(
+                                    x: center.x + cos(angle) * radius,
+                                    y: center.y + sin(angle) * radius,
+                                    width: 4, height: 4)
+                                let color = Color(
+                                    hue: (Double(burst) * 0.18 + Double(particle % 5) * 0.045)
+                                        .truncatingRemainder(dividingBy: 1),
+                                    saturation: 0.67, brightness: 1)
+                                    .opacity(0.9 * (1 - phase))
+                                context.fill(Path(ellipseIn: position), with: .color(color))
+                            }
                         }
                     }
-                }
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+                    .allowsHitTesting(false)
 
-                VStack(spacing: 24) {
-                    VStack(spacing: 7) {
-                        Image(systemName: "party.popper.fill")
-                            .font(.system(size: 42))
-                            .symbolEffect(.bounce)
-                        Text("Этот день настал!")
-                            .font(.system(size: 34, weight: .bold, design: .serif))
-                        Text(event.title)
-                            .font(.headline)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
+                    VStack(spacing: 0) {
+                        Text("Этот день настал")
+                            .font(.system(size: 18, weight: .semibold, design: .serif))
+                            .foregroundStyle(.white)
+                            .padding(.bottom, 18)
+
+                        EventCard(event: event, now: clock.date)
+                            .frame(width: min(max(260, proxy.size.width - 36), 410))
+                            .shadow(color: .white.opacity(0.12), radius: 22)
                     }
-                    .foregroundStyle(.white)
-
-                    EventCard(event: event, now: clock.date)
-                        .frame(maxWidth: 440)
-                        .shadow(color: .white.opacity(0.14), radius: 30)
-                        .scaleEffect(1.03)
-
-                    Text("Коснись экрана, чтобы продолжить")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.75))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(.horizontal, 26)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onDismiss)
             }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onDismiss)
         }
         .transition(.opacity)
     }
