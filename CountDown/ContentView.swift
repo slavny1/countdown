@@ -2,47 +2,48 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Dragging is tracked by ID rather than asynchronously reading the item provider:
-/// dropEntered can reorder immediately with a spring, while the drag preview stays visible.
+/// Live reordering keeps the dragged cell at its insertion point. The system
+/// drag preview uses only EventCard rather than a List row/background snapshot.
 private struct CardReorderDelegate: DropDelegate {
     let target: CountEvent
     @Binding var draggedID: UUID?
     @Binding var dropTargetID: UUID?
     let store: EventStore
 
+    private var canMove: Bool {
+        guard let draggedID,
+              let item = store.events.first(where: { $0.id == draggedID }) else { return false }
+        return item.isPinned == target.isPinned
+    }
+
     func validateDrop(info: DropInfo) -> Bool {
-        guard let draggedID, draggedID != target.id,
-              let source = store.events.first(where: { $0.id == draggedID }) else { return false }
-        return source.isPinned == target.isPinned
+        canMove
     }
 
     func dropEntered(info: DropInfo) {
-        guard validateDrop(info: info) else { return }
-        withAnimation(.easeInOut(duration: 0.12)) {
+        guard let draggedID, draggedID != target.id, canMove else { return }
+        withAnimation(.interactiveSpring(response: 0.38, dampingFraction: 0.82)) {
             dropTargetID = target.id
+            store.move(draggedID, before: target.id, persist: false)
         }
-    }
-
-    func dropExited(info: DropInfo) {
-        if dropTargetID == target.id { dropTargetID = nil }
+        UISelectionFeedbackGenerator().selectionChanged()
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
+        DropProposal(operation: canMove ? .move : .forbidden)
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard validateDrop(info: info), let draggedID else {
-            self.draggedID = nil
+        guard canMove else {
+            draggedID = nil
             dropTargetID = nil
             return false
         }
-        withAnimation(.spring(response: 0.48, dampingFraction: 0.88)) {
-            store.move(draggedID, before: target.id)
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+            draggedID = nil
             dropTargetID = nil
         }
-        self.draggedID = nil
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        store.finishReordering()
         return true
     }
 }
@@ -141,15 +142,17 @@ struct ContentView: View {
                 } else {
                     List {
                         ForEach(sortedEvents) { event in
-                            VStack(spacing: -19) {
+                            VStack(spacing: 0) {
                                 Button {
                                     guard !event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                                         selectedEvent = event
                                         return
                                     }
-                                    withAnimation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.88)) {
-                                        if !expandedNotes.insert(event.id).inserted {
+                                    withAnimation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.88)) {
+                                        if expandedNotes.contains(event.id) {
                                             expandedNotes.remove(event.id)
+                                        } else {
+                                            expandedNotes.insert(event.id)
                                         }
                                     }
                                 } label: {
@@ -158,32 +161,30 @@ struct ContentView: View {
                                     }
                                 }
                                 .buttonStyle(.plain)
-                                .onDrag {
-                                    draggedID = event.id
-                                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-                                    return NSItemProvider(object: event.id.uuidString as NSString)
-                                }
-                                .zIndex(1)
 
                                 if expandedNotes.contains(event.id) && !event.note.isEmpty {
-                                    VStack(alignment: .leading, spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 12) {
                                         ScrollView(.vertical) {
                                             Text(event.note)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
                                                 .font(.body)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
                                                 .textSelection(.enabled)
+                                                .fixedSize(horizontal: false, vertical: true)
                                         }
-                                        .frame(maxHeight: 155)
+                                        .frame(maxHeight: 185)
+                                        .scrollIndicators(.visible)
+
                                         Button {
                                             selectedEvent = event
                                         } label: {
                                             Label("Открыть событие", systemImage: "arrow.up.right")
                                                 .font(.caption.weight(.semibold))
                                         }
+                                        .buttonStyle(.plain)
                                     }
-                                    .padding(.horizontal, 20)
-                                    .padding(.top, 32)
-                                    .padding(.bottom, 15)
+                                    .padding(.horizontal, 18)
+                                    .padding(.top, 17)
+                                    .padding(.bottom, 18)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(Color(uiColor: .secondarySystemGroupedBackground))
                                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -191,16 +192,15 @@ struct ContentView: View {
                             }
                             .background(Color(uiColor: .secondarySystemGroupedBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+                            .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 25))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
+                            .listRowInsets(EdgeInsets(top: 7, leading: 18, bottom: 7, trailing: 18))
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
-                                    // Let iOS close the swipe-action surface first;
-                                    // relocating its row in the same frame causes a visual blink.
                                     Task { @MainActor in
-                                        try? await Task.sleep(for: .milliseconds(240))
-                                        withAnimation(.spring(response: 0.52, dampingFraction: 0.88)) {
+                                        try? await Task.sleep(for: .milliseconds(210))
+                                        withAnimation(.spring(response: 0.44, dampingFraction: 0.86)) {
                                             store.togglePin(event)
                                         }
                                     }
@@ -225,15 +225,37 @@ struct ContentView: View {
                                 }
                             }
                             .overlay(alignment: .top) {
-                                if dropTargetID == event.id {
+                                if dropTargetID == event.id && draggedID != nil {
                                     Capsule()
                                         .fill(Color.accentColor)
                                         .frame(height: 5)
-                                        .padding(.horizontal, 16)
-                                        .offset(y: -7)
-                                        .shadow(color: Color.accentColor.opacity(0.35), radius: 5)
+                                        .padding(.horizontal, 10)
+                                        .offset(y: -9)
+                                        .shadow(color: Color.accentColor.opacity(0.3), radius: 5)
                                         .allowsHitTesting(false)
                                 }
+                            }
+                            .opacity(draggedID == event.id ? 0.12 : 1)
+                            .overlay {
+                                if draggedID == event.id {
+                                    RoundedRectangle(cornerRadius: 25)
+                                        .strokeBorder(Color.accentColor.opacity(0.65),
+                                                      style: StrokeStyle(lineWidth: 2, dash: [7, 6]))
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            .onDrag {
+                                draggedID = event.id
+                                dropTargetID = nil
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                return NSItemProvider(object: event.id.uuidString as NSString)
+                            } preview: {
+                                EventCard(event: event, now: .now)
+                                    .frame(width: 325)
+                                    .clipShape(RoundedRectangle(cornerRadius: 25,
+                                                                style: .continuous))
+                                    .contentShape(.dragPreview,
+                                                  RoundedRectangle(cornerRadius: 25))
                             }
                             .onDrop(of: [UTType.plainText],
                                     delegate: CardReorderDelegate(target: event,
