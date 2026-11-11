@@ -204,12 +204,12 @@ struct ContentView: View {
             if let lifted {
                 EventCard(event: lifted.event, now: .now)
                     .frame(width: lifted.frame.width)
-                    .scaleEffect(reduceMotion ? 1 : 1.055)
-                    .shadow(color: .black.opacity(0.26), radius: 25, y: 15)
+                    .scaleEffect(reduceMotion ? 1 : 1.025)
+                    .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
                     .position(x: lifted.frame.midX + lifted.translation.width,
                               y: lifted.frame.midY + lifted.translation.height)
                     .allowsHitTesting(false)
-                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .transition(.opacity)
                     .zIndex(100)
             }
         }
@@ -289,27 +289,30 @@ struct ContentView: View {
                             guard lifted == nil else { return }
                             if swipedID != nil {
                                 withAnimation(.easeOut(duration: 0.2)) { swipedID = nil }
-                            } else if !event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            } else {
+                                // A short tap never lifts a card or navigates full-screen.
+                                // It reveals its compact details panel; the link below
+                                // is the deliberate action for opening the event page.
                                 withAnimation(reduceMotion ? nil : .spring(response: 0.44, dampingFraction: 0.9)) {
                                     expandedNoteID = expandedNoteID == event.id ? nil : event.id
                                 }
-                            } else {
-                                selectedEventID = event.id
                             }
                         }
                 }
 
-                if isOpen && !event.note.isEmpty {
+                if isOpen {
                     VStack(alignment: .leading, spacing: 12) {
-                        ScrollView(.vertical) {
-                            Text(event.note)
-                                .font(.body)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
+                        if !event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            ScrollView(.vertical) {
+                                Text(event.note)
+                                    .font(.body)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                            }
+                            .frame(maxHeight: 180)
+                            .scrollIndicators(.visible)
                         }
-                        .frame(maxHeight: 180)
-                        .scrollIndicators(.visible)
 
                         Button {
                             selectedEventID = event.id
