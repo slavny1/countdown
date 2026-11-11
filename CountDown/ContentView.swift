@@ -285,6 +285,10 @@ struct ContentView: View {
                             }
                         }
                         .contentShape(RoundedRectangle(cornerRadius: 25))
+                        // Recognize the long press before the ScrollView's pan and
+                        // the card's short tap. This must be attached to the card,
+                        // not the surrounding swipe-action container.
+                        .highPriorityGesture(liftGesture(for: event))
                         .onTapGesture {
                             guard lifted == nil else { return }
                             if swipedID != nil {
@@ -342,7 +346,6 @@ struct ContentView: View {
             }
             .offset(x: swipedID == event.id && lifted == nil ? -228 : 0)
             .simultaneousGesture(swipeGesture(for: event))
-            .simultaneousGesture(liftGesture(for: event))
         }
         .accessibilityElement(children: .contain)
     }
@@ -379,7 +382,7 @@ struct ContentView: View {
     }
 
     private func liftGesture(for event: CountEvent) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.4, maximumDistance: 14)
+        LongPressGesture(minimumDuration: 0.4, maximumDistance: 20)
             .sequenced(before: DragGesture(minimumDistance: 0,
                                            coordinateSpace: .named("eventList")))
             .onChanged { phase in
@@ -387,15 +390,23 @@ struct ContentView: View {
                 case .first(true):
                     beginLift(for: event)
                 case .second(true, let motion):
+                    // On some iOS versions the sequenced gesture does not
+                    // emit .first(true) when the pan recognizer is already
+                    // tracking the touch. The second phase must also lift.
                     if let motion {
                         updateLift(for: event, translation: motion.translation)
+                    } else {
+                        beginLift(for: event)
                     }
                 default:
                     break
                 }
             }
-            .onEnded { _ in
-                endLift()
+            .onEnded { phase in
+                switch phase {
+                case .first, .second:
+                    endLift()
+                }
             }
     }
 
