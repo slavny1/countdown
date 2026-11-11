@@ -276,6 +276,14 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 TimelineView(.periodic(from: .now, by: 15)) { clock in
                     EventCard(event: event, now: clock.date)
+                        .background {
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: CardFramePreference.self,
+                                    value: [event.id: geometry.frame(in: .named("eventList"))]
+                                )
+                            }
+                        }
                         .contentShape(RoundedRectangle(cornerRadius: 25))
                         .onTapGesture {
                             guard lifted == nil else { return }
@@ -332,12 +340,6 @@ struct ContentView: View {
             .offset(x: swipedID == event.id && lifted == nil ? -228 : 0)
             .simultaneousGesture(swipeGesture(for: event))
             .simultaneousGesture(liftGesture(for: event))
-        }
-        .background {
-            GeometryReader { proxy in
-                Color.clear.preference(key: CardFramePreference.self,
-                                       value: [event.id: proxy.frame(in: .named("eventList"))])
-            }
         }
         .accessibilityElement(children: .contain)
     }
