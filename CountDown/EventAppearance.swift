@@ -229,20 +229,20 @@ struct EventCard: View {
             Spacer(minLength: 6)
             EventTimeDisplay(event: event, now: now, large: false)
                 .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
-            HStack(alignment: .bottom, spacing: 6) {
+            VStack(alignment: event.style.horizontalAlignment, spacing: 3) {
                 Text(event.title)
                     .font(.system(size: 20 * scale, weight: event.style.thickness.fontWeight,
                                   design: event.style.typeface.fontDesign))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.4)
-                    .layoutPriority(1)
-                Spacer(minLength: 2)
+                    .minimumScaleFactor(0.45)
+                    .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
                 Text(event.date.displayLabel)
                     .font(.system(size: 11, weight: .medium))
-                    .multilineTextAlignment(.trailing)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity, alignment: event.style.swiftUIAlignment)
             }
+            .layoutPriority(1)
         }
         .foregroundStyle(event.style.textColor)
         .padding(19)
