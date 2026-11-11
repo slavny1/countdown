@@ -39,6 +39,25 @@ final class EventStore: ObservableObject {
         persist()
     }
 
+    /// Reorder inside the current pin group. The index is computed from the
+    /// destination gap among all peers excluding the lifted event.
+    func reorder(_ eventID: UUID, toGroupIndex index: Int) {
+        guard let source = events.firstIndex(where: { $0.id == eventID }) else { return }
+        let moved = events.remove(at: source)
+        let group = events.enumerated().filter { $0.element.isPinned == moved.isPinned }
+        let insertion = max(0, min(index, group.count))
+        let destination: Int
+        if insertion < group.count {
+            destination = group[insertion].offset
+        } else if let last = group.last {
+            destination = last.offset + 1
+        } else {
+            destination = moved.isPinned ? 0 : events.count
+        }
+        events.insert(moved, at: min(destination, events.count))
+        persist()
+    }
+
     func addPreset(_ preset: WidgetPreset) {
         widgetPresets.append(preset)
         persistPresets()
