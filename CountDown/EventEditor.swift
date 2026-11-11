@@ -126,6 +126,76 @@ struct EventEditor: View {
                 .background(Color(uiColor: .systemGroupedBackground))
 
                 Form {
+                    eventFields
+                    countFields
+                    appearanceFields
+                    widgetFields
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle(existingEvent == nil ? "Новое событие" : "Изменить событие")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Сохранить") { save() }
+                        .bold()
+                        .disabled(trimmedTitle.isEmpty)
+                        .accessibilityIdentifier("saveEvent")
+                }
+            }
+            .sheet(item: $showingCustomColor) { target in
+                NavigationStack {
+                    Form {
+                        ColorPicker("Выбери цвет", selection: $pickedColor, supportsOpacity: false)
+                    }
+                    .navigationTitle("Добавить цвет")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Отмена") { showingCustomColor = nil }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Добавить") {
+                                saveCustomColor(target)
+                                showingCustomColor = nil
+                            }
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showingWidgets) {
+                if let event = existingEvent {
+                    WidgetGallery(eventID: event.id).environmentObject(store)
+                }
+            }
+            .onAppear {
+                customText = UserDefaults.standard.stringArray(forKey: "days.customTextColors") ?? []
+                customBackgrounds = UserDefaults.standard.stringArray(forKey: "days.customBackgrounds") ?? []
+                customMasks = UserDefaults.standard.stringArray(forKey: "days.customMasks") ?? []
+            }
+            .onChange(of: selectedPhoto) { _, item in
+                guard let item else { return }
+                Task {
+                    guard let data = try? await item.loadTransferable(type: Data.self),
+                          let newImage = UIImage(data: data) else {
+                        photoError = true
+                        return
+                    }
+                    pendingImage = newImage
+                    removePhoto = false
+                }
+            }
+            .alert("Не удалось сохранить фото", isPresented: $photoError) {
+                Button("ОК", role: .cancel) {}
+            }
+        }
+    }
+
+    private var eventFields: some View {
                     Section("Событие") {
                         TextField("Название события", text: $title)
                             .textInputAutocapitalization(.sentences)
@@ -175,6 +245,9 @@ struct EventEditor: View {
                         }
                     }
 
+    }
+
+    private var countFields: some View {
                     Section("Отсчёт") {
                         Toggle("Автоматически", isOn: $displayUnits.automatic)
                         if !displayUnits.automatic {
@@ -185,6 +258,9 @@ struct EventEditor: View {
                         Toggle("Круглые даты", isOn: $showsMilestones)
                     }
 
+    }
+
+    private var appearanceFields: some View {
                     Section {
                         DisclosureGroup("Оформление", isExpanded: $showStyle) {
                             DisclosureGroup("Шрифт", isExpanded: $showFonts) {
@@ -284,6 +360,9 @@ struct EventEditor: View {
                         }
                     }
 
+    }
+
+    private var widgetFields: some View {
                     Section("Виджеты") {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .center, spacing: 12) {
@@ -307,69 +386,6 @@ struct EventEditor: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                }
-                .scrollContentBackground(.hidden)
-            }
-            .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
-            .navigationTitle(existingEvent == nil ? "Новое событие" : "Изменить событие")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Сохранить") { save() }
-                        .bold()
-                        .disabled(trimmedTitle.isEmpty)
-                        .accessibilityIdentifier("saveEvent")
-                }
-            }
-            .sheet(item: $showingCustomColor) { target in
-                NavigationStack {
-                    Form {
-                        ColorPicker("Выбери цвет", selection: $pickedColor, supportsOpacity: false)
-                    }
-                    .navigationTitle("Добавить цвет")
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Отмена") { showingCustomColor = nil }
-                        }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Добавить") {
-                                saveCustomColor(target)
-                                showingCustomColor = nil
-                            }
-                        }
-                    }
-                }
-                .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showingWidgets) {
-                if let event = existingEvent {
-                    WidgetGallery(eventID: event.id).environmentObject(store)
-                }
-            }
-            .onAppear {
-                customText = UserDefaults.standard.stringArray(forKey: "days.customTextColors") ?? []
-                customBackgrounds = UserDefaults.standard.stringArray(forKey: "days.customBackgrounds") ?? []
-                customMasks = UserDefaults.standard.stringArray(forKey: "days.customMasks") ?? []
-            }
-            .onChange(of: selectedPhoto) { _, item in
-                guard let item else { return }
-                Task {
-                    guard let data = try? await item.loadTransferable(type: Data.self),
-                          let newImage = UIImage(data: data) else {
-                        photoError = true
-                        return
-                    }
-                    pendingImage = newImage
-                    removePhoto = false
-                }
-            }
-            .alert("Не удалось сохранить фото", isPresented: $photoError) {
-                Button("ОК", role: .cancel) {}
-            }
-        }
     }
 
     private func toggleUnit(_ unit: CountUnit, title: String) -> some View {
