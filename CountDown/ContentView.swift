@@ -209,7 +209,7 @@ struct ContentView: View {
                     .position(x: lifted.frame.midX + lifted.translation.width,
                               y: lifted.frame.midY + lifted.translation.height)
                     .allowsHitTesting(false)
-                    .transition(.opacity)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
                     .zIndex(100)
             }
         }
@@ -399,10 +399,12 @@ struct ContentView: View {
     private func beginLift(for event: CountEvent) {
         guard lifted == nil, let frame = frames[event.id] else { return }
         let initial = group(for: event).firstIndex(where: { $0.id == event.id }) ?? 0
-        lifted = LiftedCard(event: event, frame: frame, framesAtLift: frames,
-                            initialIndex: initial)
-        insertionIndex = initial
-        swipedID = nil
+        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.78)) {
+            lifted = LiftedCard(event: event, frame: frame, framesAtLift: frames,
+                                initialIndex: initial)
+            insertionIndex = initial
+            swipedID = nil
+        }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
