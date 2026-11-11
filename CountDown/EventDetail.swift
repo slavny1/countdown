@@ -7,6 +7,7 @@ struct EventDetail: View {
     @EnvironmentObject private var store: EventStore
     @State private var showingSettings = false
     @State private var showingWidgets = false
+    @State private var showingWidgetEditor = false
 
     private var currentEvent: CountEvent {
         store.events.first(where: { $0.id == event.id }) ?? event
@@ -86,7 +87,7 @@ struct EventDetail: View {
                                               wide: false)
                                 .frame(width: 172, height: 172)
                             Button {
-                                showingWidgets = true
+                                showingWidgetEditor = true
                             } label: {
                                 Image(systemName: "plus")
                                     .font(.title2.weight(.semibold))
@@ -142,15 +143,16 @@ struct EventDetail: View {
                     showingSettings = true
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Готово") { dismiss() }
-            }
         }
         .sheet(isPresented: $showingSettings) {
             EventEditor(event: currentEvent).environmentObject(store)
         }
         .sheet(isPresented: $showingWidgets) {
             WidgetGallery(eventID: event.id).environmentObject(store)
+        }
+        .sheet(isPresented: $showingWidgetEditor) {
+            WidgetPresetEditor(event: currentEvent)
+                .environmentObject(store)
         }
     }
 }
