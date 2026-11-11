@@ -23,7 +23,7 @@ final class EventStore: ObservableObject {
         persist()
     }
 
-    func move(_ draggedID: UUID, before targetID: UUID) {
+    func move(_ draggedID: UUID, before targetID: UUID, persist shouldPersist: Bool = true) {
         guard draggedID != targetID,
               let source = events.firstIndex(where: { $0.id == draggedID }),
               let target = events.firstIndex(where: { $0.id == targetID }),
@@ -32,6 +32,10 @@ final class EventStore: ObservableObject {
         let moved = events.remove(at: source)
         guard let destination = events.firstIndex(where: { $0.id == targetID }) else { return }
         events.insert(moved, at: movingDown ? destination + 1 : destination)
+        if shouldPersist { persist() }
+    }
+
+    func finishReordering() {
         persist()
     }
 
