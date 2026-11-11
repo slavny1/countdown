@@ -1,134 +1,87 @@
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
-/// Live reordering keeps the dragged cell at its insertion point. The system
-/// drag preview uses only EventCard rather than a List row/background snapshot.
-private struct CardReorderDelegate: DropDelegate {
-    let target: CountEvent
-    @Binding var draggedID: UUID?
-    @Binding var dropTargetID: UUID?
-    let store: EventStore
+private struct CardFramePreference: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
 
-    private var canMove: Bool {
-        guard let draggedID,
-              let item = store.events.first(where: { $0.id == draggedID }) else { return false }
-        return item.isPinned == target.isPinned
-    }
-
-    func validateDrop(info: DropInfo) -> Bool {
-        canMove
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let draggedID, draggedID != target.id, canMove else { return }
-        withAnimation(.interactiveSpring(response: 0.38, dampingFraction: 0.82)) {
-            dropTargetID = target.id
-            store.move(draggedID, before: target.id, persist: false)
-        }
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: canMove ? .move : .forbidden)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard canMove else {
-            draggedID = nil
-            dropTargetID = nil
-            return false
-        }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-            draggedID = nil
-            dropTargetID = nil
-        }
-        store.finishReordering()
-        return true
+    static func reduce(value: inout [UUID: CGRect],
+                       nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
     }
 }
 
 private enum EditorRoute: Identifiable {
     case create, edit(CountEvent)
+
     var id: String {
         switch self {
         case .create: "create"
         case .edit(let event): event.id.uuidString
         }
     }
+
     var event: CountEvent? {
         if case .edit(let event) = self { return event }
         return nil
     }
 }
 
+private struct LiftedCard {
+    let event: CountEvent
+    let frame: CGRect
+    var translation: CGSize = .zero
+    let framesAtLift: [UUID: CGRect]
+    let initialIndex: Int
+}
+
 struct ContentView: View {
     @EnvironmentObject private var store: EventStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var editor: EditorRoute?
-    @State private var selectedEvent: CountEvent?
-    @State private var expandedNotes: Set<UUID> = []
-    @State private var draggedID: UUID?
-    @State private var dropTargetID: UUID?
+    @State private var selectedEventID: UUID?
+    @State private var expandedNoteID: UUID?
+    @State private var lifted: LiftedCard?
+    @State private var insertionIndex: Int?
+    @State private var frames: [UUID: CGRect] = [:]
+    @State private var swipedID: UUID?
     @State private var openedPreset: WidgetPreset?
     @State private var openedWidgetEvent: CountEvent?
     @AppStorage("days.celebrations.dismissed") private var dismissedCelebrations = ""
+
+    private var sortedEvents: [CountEvent] {
+        store.events.enumerated().sorted { left, right in
+            if left.element.isPinned != right.element.isPinned {
+                return left.element.isPinned
+            }
+            return left.offset < right.offset
+        }.map(\.element)
+    }
+
+    private func group(for event: CountEvent) -> [CountEvent] {
+        sortedEvents.filter { $0.isPinned == event.isPinned }
+    }
 
     private func celebrationKey(for event: CountEvent) -> String {
         "\(event.id.uuidString)-\(event.date.year)-\(event.date.month)-\(event.date.day)"
     }
 
-    private func canCelebrate(_ event: CountEvent, at date: Date) -> Bool {
-        DayCount.phase(for: event, now: date) == .now &&
-        !dismissedCelebrations.split(separator: "|").contains(Substring(celebrationKey(for: event)))
+    private func canCelebrate(_ event: CountEvent, at now: Date) -> Bool {
+        DayCount.phase(for: event, now: now) == .now &&
+        !dismissedCelebrations.split(separator: "|")
+            .contains(Substring(celebrationKey(for: event)))
     }
 
     private func dismissCelebration(_ event: CountEvent) {
-        let key = celebrationKey(for: event)
         withAnimation(.easeOut(duration: 0.45)) {
-            dismissedCelebrations = dismissedCelebrations + "|" + key
+            dismissedCelebrations += "|" + celebrationKey(for: event)
         }
-    }
-
-    private var sortedEvents: [CountEvent] {
-        store.events.enumerated()
-            .sorted {
-                $0.element.isPinned == $1.element.isPinned
-                    ? $0.offset < $1.offset
-                    : $0.element.isPinned
-            }
-            .map(\.element)
     }
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Дни")
-                            .font(.system(size: 44, weight: .bold, design: .serif))
-                            .tracking(-2.5)
-                            .accessibilityAddTraits(.isHeader)
-                        Text("Даты, которые имеют значение")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        editor = .create
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.title3.weight(.semibold))
-                            .frame(width: 46, height: 46)
-                            .background(.primary.opacity(0.08), in: Circle())
-                    }
-                    .accessibilityLabel("Добавить событие")
-                    .accessibilityIdentifier("addEvent")
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
+            VStack(spacing: 0) {
+                header
 
                 if store.events.isEmpty {
                     ContentUnavailableView {
@@ -140,145 +93,21 @@ struct ContentView: View {
                             .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    List {
-                        ForEach(sortedEvents) { event in
-                            VStack(spacing: 0) {
-                                Button {
-                                    guard !event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                                        selectedEvent = event
-                                        return
-                                    }
-                                    withAnimation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.88)) {
-                                        if expandedNotes.contains(event.id) {
-                                            expandedNotes.remove(event.id)
-                                        } else {
-                                            expandedNotes.insert(event.id)
-                                        }
-                                    }
-                                } label: {
-                                    TimelineView(.periodic(from: .now, by: 15)) { clock in
-                                        EventCard(event: event, now: clock.date)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-
-                                if expandedNotes.contains(event.id) && !event.note.isEmpty {
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        ScrollView(.vertical) {
-                                            Text(event.note)
-                                                .font(.body)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .textSelection(.enabled)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                        }
-                                        .frame(maxHeight: 185)
-                                        .scrollIndicators(.visible)
-
-                                        Button {
-                                            selectedEvent = event
-                                        } label: {
-                                            Label("Открыть событие", systemImage: "arrow.up.right")
-                                                .font(.caption.weight(.semibold))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.horizontal, 18)
-                                    .padding(.top, 17)
-                                    .padding(.bottom, 18)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color(uiColor: .secondarySystemGroupedBackground))
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                                }
-                            }
-                            .background(Color(uiColor: .secondarySystemGroupedBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
-                            .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 25))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 7, leading: 18, bottom: 7, trailing: 18))
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button {
-                                    Task { @MainActor in
-                                        try? await Task.sleep(for: .milliseconds(210))
-                                        withAnimation(.spring(response: 0.44, dampingFraction: 0.86)) {
-                                            store.togglePin(event)
-                                        }
-                                    }
-                                } label: {
-                                    Label(event.isPinned ? "Открепить" : "Закрепить",
-                                          systemImage: event.isPinned ? "pin.slash" : "pin")
-                                }
-                                .tint(.orange)
-
-                                Button { editor = .edit(event) } label: {
-                                    Label("Изменить", systemImage: "pencil")
-                                }
-                                .tint(.indigo)
-
-                                Button(role: .destructive) {
-                                    withAnimation {
-                                        store.remove(event)
-                                        expandedNotes.remove(event.id)
-                                    }
-                                } label: {
-                                    Label("Удалить", systemImage: "trash")
-                                }
-                            }
-                            .overlay(alignment: .top) {
-                                if dropTargetID == event.id && draggedID != nil {
-                                    Capsule()
-                                        .fill(Color.accentColor)
-                                        .frame(height: 5)
-                                        .padding(.horizontal, 10)
-                                        .offset(y: -9)
-                                        .shadow(color: Color.accentColor.opacity(0.3), radius: 5)
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                            .opacity(draggedID == event.id ? 0.12 : 1)
-                            .overlay {
-                                if draggedID == event.id {
-                                    RoundedRectangle(cornerRadius: 25)
-                                        .strokeBorder(Color.accentColor.opacity(0.65),
-                                                      style: StrokeStyle(lineWidth: 2, dash: [7, 6]))
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                            .onDrag {
-                                draggedID = event.id
-                                dropTargetID = nil
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                return NSItemProvider(object: event.id.uuidString as NSString)
-                            } preview: {
-                                EventCard(event: event, now: .now)
-                                    .frame(width: 325)
-                                    .clipShape(RoundedRectangle(cornerRadius: 25,
-                                                                style: .continuous))
-                                    .contentShape(.dragPreview,
-                                                  RoundedRectangle(cornerRadius: 25))
-                            }
-                            .onDrop(of: [UTType.plainText],
-                                    delegate: CardReorderDelegate(target: event,
-                                                                  draggedID: $draggedID,
-                                                                  dropTargetID: $dropTargetID,
-                                                                  store: store))
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.87),
-                               value: sortedEvents.map(\.id))
+                    cardList
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(item: $editor) { route in
-                EventEditor(event: route.event).environmentObject(store)
-            }
-            .sheet(item: $selectedEvent) { event in
-                NavigationStack {
-                    EventDetail(event: store.events.first(where: { $0.id == event.id }) ?? event)
+            .navigationDestination(item: $selectedEventID) { id in
+                if let event = store.events.first(where: { $0.id == id }) {
+                    EventDetail(event: event)
+                        .environmentObject(store)
+                        .toolbar(.visible, for: .navigationBar)
                 }
+            }
+            .sheet(item: $editor) { route in
+                EventEditor(event: route.event)
+                    .environmentObject(store)
             }
             .sheet(item: $openedPreset) { preset in
                 if let event = store.events.first(where: { $0.id == preset.eventID }) {
@@ -311,6 +140,299 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Дни")
+                    .font(.system(size: 44, weight: .bold, design: .serif))
+                    .tracking(-2.5)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Даты, которые имеют значение")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                editor = .create
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title3.weight(.semibold))
+                    .frame(width: 46, height: 46)
+                    .background(.primary.opacity(0.08), in: Circle())
+            }
+            .accessibilityLabel("Добавить событие")
+            .accessibilityIdentifier("addEvent")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
+    }
+
+    private var cardList: some View {
+        ScrollView {
+            LazyVStack(spacing: 13) {
+                ForEach(sortedEvents) { event in
+                    VStack(spacing: 0) {
+                        if isInsertionBefore(event) {
+                            insertionMarker
+                        }
+
+                        cardRow(event)
+
+                        if isInsertionAfter(event) {
+                            insertionMarker
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .animation(reduceMotion ? nil : .spring(response: 0.43, dampingFraction: 0.89),
+                       value: insertionIndex)
+            .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.9),
+                       value: sortedEvents.map(\.id))
+            .animation(reduceMotion ? nil : .spring(response: 0.44, dampingFraction: 0.88),
+                       value: expandedNoteID)
+        }
+        .scrollDisabled(lifted != nil)
+        .coordinateSpace(name: "eventList")
+        .onPreferenceChange(CardFramePreference.self) { frames = $0 }
+        .overlay(alignment: .topLeading) {
+            if let lifted {
+                EventCard(event: lifted.event, now: .now)
+                    .frame(width: lifted.frame.width)
+                    .scaleEffect(reduceMotion ? 1 : 1.055)
+                    .shadow(color: .black.opacity(0.26), radius: 25, y: 15)
+                    .position(x: lifted.frame.midX + lifted.translation.width,
+                              y: lifted.frame.midY + lifted.translation.height)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .zIndex(100)
+            }
+        }
+        .accessibilityIdentifier("eventList")
+    }
+
+    private var insertionMarker: some View {
+        Capsule()
+            .fill(Color.accentColor)
+            .frame(height: 5)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 12)
+            .shadow(color: Color.accentColor.opacity(0.35), radius: 5)
+            .accessibilityLabel("Место вставки карточки")
+    }
+
+    private func isInsertionBefore(_ event: CountEvent) -> Bool {
+        guard let lifted, let insertionIndex else { return false }
+        let groupMembers = group(for: lifted.event).filter { $0.id != lifted.event.id }
+        return groupMembers.indices.contains(insertionIndex) &&
+            groupMembers[insertionIndex].id == event.id
+    }
+
+    private func isInsertionAfter(_ event: CountEvent) -> Bool {
+        guard let lifted, let insertionIndex else { return false }
+        let groupMembers = group(for: lifted.event).filter { $0.id != lifted.event.id }
+        return !groupMembers.isEmpty && insertionIndex == groupMembers.count &&
+            groupMembers.last?.id == event.id
+    }
+
+    private func cardRow(_ event: CountEvent) -> some View {
+        let isOpen = expandedNoteID == event.id
+        let isLifted = lifted?.event.id == event.id
+
+        return ZStack(alignment: .trailing) {
+            if lifted == nil || swipedID == event.id {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    actionButton("Закрепить", icon: event.isPinned ? "pin.slash" : "pin",
+                                 color: .orange) {
+                        swipedID = nil
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(180))
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.88)) {
+                                store.togglePin(event)
+                            }
+                        }
+                    }
+                    actionButton("Изменить", icon: "pencil", color: .indigo) {
+                        swipedID = nil
+                        editor = .edit(event)
+                    }
+                    actionButton("Удалить", icon: "trash", color: .red) {
+                        swipedID = nil
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
+                            store.remove(event)
+                            if expandedNoteID == event.id { expandedNoteID = nil }
+                        }
+                    }
+                }
+                .padding(.trailing, 5)
+            }
+
+            VStack(spacing: 0) {
+                TimelineView(.periodic(from: .now, by: 15)) { clock in
+                    EventCard(event: event, now: clock.date)
+                        .contentShape(RoundedRectangle(cornerRadius: 25))
+                        .onTapGesture {
+                            guard lifted == nil else { return }
+                            if swipedID != nil {
+                                withAnimation(.easeOut(duration: 0.2)) { swipedID = nil }
+                            } else if !event.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                withAnimation(reduceMotion ? nil : .spring(response: 0.44, dampingFraction: 0.9)) {
+                                    expandedNoteID = expandedNoteID == event.id ? nil : event.id
+                                }
+                            } else {
+                                selectedEventID = event.id
+                            }
+                        }
+                }
+
+                if isOpen && !event.note.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ScrollView(.vertical) {
+                            Text(event.note)
+                                .font(.body)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxHeight: 180)
+                        .scrollIndicators(.visible)
+
+                        Button {
+                            selectedEventID = event.id
+                        } label: {
+                            Label("Открыть событие", systemImage: "arrow.up.right")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 19)
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground))
+                    .transition(.opacity)
+                }
+            }
+            .background(Color(uiColor: .secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+            .opacity(isLifted ? 0.08 : (lifted == nil ? 1 : 0.83))
+            .overlay {
+                if lifted != nil && !isLifted {
+                    RoundedRectangle(cornerRadius: 25)
+                        .fill(.black.opacity(0.14))
+                        .allowsHitTesting(false)
+                }
+            }
+            .offset(x: swipedID == event.id && lifted == nil ? -228 : 0)
+            .simultaneousGesture(swipeGesture(for: event))
+            .simultaneousGesture(liftGesture(for: event))
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: CardFramePreference.self,
+                                       value: [event.id: proxy.frame(in: .named("eventList"))])
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func actionButton(_ label: String, icon: String, color: Color,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon).font(.body.weight(.semibold))
+                Text(label).font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(.white)
+            .frame(width: 67, height: 65)
+            .background(color, in: RoundedRectangle(cornerRadius: 15))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func swipeGesture(for event: CountEvent) -> some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onEnded { value in
+                guard lifted == nil,
+                      abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
+                withAnimation(.easeOut(duration: 0.23)) {
+                    if value.translation.width < -48 {
+                        swipedID = event.id
+                    } else if value.translation.width > 48 {
+                        swipedID = nil
+                    }
+                }
+            }
+    }
+
+    private func liftGesture(for event: CountEvent) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.4, maximumDistance: 14)
+            .sequenced(before: DragGesture(minimumDistance: 0,
+                                           coordinateSpace: .named("eventList")))
+            .onChanged { phase in
+                switch phase {
+                case .first(true):
+                    beginLift(for: event)
+                case .second(true, let motion):
+                    if let motion {
+                        updateLift(for: event, translation: motion.translation)
+                    }
+                default:
+                    break
+                }
+            }
+            .onEnded { _ in
+                endLift()
+            }
+    }
+
+    private func beginLift(for event: CountEvent) {
+        guard lifted == nil, let frame = frames[event.id] else { return }
+        let initial = group(for: event).firstIndex(where: { $0.id == event.id }) ?? 0
+        lifted = LiftedCard(event: event, frame: frame, framesAtLift: frames,
+                            initialIndex: initial)
+        insertionIndex = initial
+        swipedID = nil
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    private func updateLift(for event: CountEvent, translation: CGSize) {
+        if lifted == nil { beginLift(for: event) }
+        guard var state = lifted, state.event.id == event.id else { return }
+        state.translation = translation
+        lifted = state
+
+        let fingerY = state.frame.midY + translation.height
+        let candidates = group(for: state.event).filter { $0.id != state.event.id }
+        let insertion = candidates.firstIndex {
+            fingerY < (state.framesAtLift[$0.id]?.midY ?? .greatestFiniteMagnitude)
+        } ?? candidates.count
+
+        if insertionIndex != insertion {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.85)) {
+                insertionIndex = insertion
+            }
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+    }
+
+    private func endLift() {
+        guard let state = lifted else { return }
+        let target = insertionIndex ?? state.initialIndex
+        withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.85)) {
+            store.reorder(state.event.id, toGroupIndex: target)
+            insertionIndex = nil
+            lifted = nil
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }
 
